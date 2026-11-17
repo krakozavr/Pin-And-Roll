@@ -11,10 +11,15 @@ Hyperionics Technology LLC: the **push-pin** and **roll-up** title bar buttons.
 Everything else FbX did (Favorites / Recent folders in file dialogs, dialog
 resizing, Explorer integration) is intentionally left out.
 
-**Status: preview.** An automated test drives the buttons on real windows; it
-passes under Wine and is run on Windows Server 2025 / 2022 by the workflow in
-`.github/workflows/build.yml`. It has not yet been tried by a person on a
-Windows 11 desktop with everyday applications.
+![Normal, pinned and rolled-up title bars](docs/screenshot.png)
+
+*Captured by the automated test on Windows Server 2025 (maximized, normal,
+pinned, rolled up).*
+
+**Status: preview.** An automated test drives the buttons on real windows and
+passes on Windows Server 2025 and 2022 (workflow in
+`.github/workflows/build.yml`) and under Wine. It has not yet been tried by a
+person on a Windows 11 desktop with everyday applications.
 
 ## What is different from FbX 2.x
 
