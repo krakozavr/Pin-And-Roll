@@ -1,0 +1,37 @@
+name: build
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -B build -A x64
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Integration test (real windows, real clicks on the buttons)
+        timeout-minutes: 5
+        run: |
+          New-Item -ItemType Directory -Force shots | Out-Null
+          cmd /c ver
+          build\Release\fbxtest.exe build\Release\fbx.exe --shot shots\${{ matrix.os }}
+      - name: Upload program
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fbx-${{ matrix.os }}
+          path: |
+            build/Release/fbx.exe
+            shots/*.png
