@@ -54,8 +54,9 @@ This version injects nothing. One small program:
 ## Deliberate differences
 
 - A pin set while a window is rolled up is kept after unrolling (FbX lost it).
-- Resizing or maximizing a rolled-up window simply ends the rolled state
-  (FbX blocked resizing by subclassing the window, which needs injection).
+- Resizing a rolled-up window by hand ends the rolled state (FbX blocked
+  resizing by subclassing the window, which needs injection). Maximizing a
+  rolled-up window shows it in full; restoring it brings the strip back.
 - If FBX is killed, rolled windows stay usable and are recognised again on the
   next start.
 - No "Always on top" / "Roll up" entries in the window system menu: adding
@@ -67,8 +68,10 @@ This version injects nothing. One small program:
 
 - Programs running as administrator get no buttons unless FBX itself is
   started as administrator (Windows blocks the requests otherwise).
-- Programs that draw their own title bar may have controls where the buttons
-  go. Use an `offset:N` exception to move them, or `ignore`.
+- Programs that draw their own title bar (browsers, Electron and WinUI apps)
+  are asked where their real buttons and the nearest free stretch of title
+  bar are. If there is no free stretch, the buttons sit next to minimize and
+  may cover a control: use an `offset:N` exception to move them, or `ignore`.
 - Exclusive full-screen windows get no buttons.
 
 ## Use
