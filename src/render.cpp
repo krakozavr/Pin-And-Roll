@@ -21,7 +21,9 @@ void RenderShutdown()
 }
 
 // Glyphs are designed in a 16x16 box whose origin is (ox, oy); s = scale.
-static void DrawPin(Graphics& g, float ox, float oy, float s, Color fg, bool pinned)
+// "extra" widens the strokes: used to lay a contrasting outline under the
+// glyph so that it stays readable on a background we guessed wrong.
+static void DrawPin(Graphics& g, float ox, float oy, float s, Color fg, bool pinned, float extra = 0)
 {
     GraphicsState st = g.Save();
     g.TranslateTransform(ox + 8 * s, oy + 8 * s);
@@ -30,7 +32,7 @@ static void DrawPin(Graphics& g, float ox, float oy, float s, Color fg, bool pin
     g.TranslateTransform(-8, -8);
 
     PointF body[] = { {5.5f, 2.0f}, {10.5f, 2.0f}, {10.0f, 6.5f}, {12.5f, 9.5f}, {3.5f, 9.5f}, {6.0f, 6.5f} };
-    Pen pen(fg, 1.2f);
+    Pen pen(fg, 1.2f + extra);
     pen.SetLineJoin(LineJoinRound);
     pen.SetStartCap(LineCapRound);
     pen.SetEndCap(LineCapRound);
@@ -43,16 +45,16 @@ static void DrawPin(Graphics& g, float ox, float oy, float s, Color fg, bool pin
     g.Restore(st);
 }
 
-static void DrawRoll(Graphics& g, float ox, float oy, float s, Color fg, bool rolled)
+static void DrawRoll(Graphics& g, float ox, float oy, float s, Color fg, bool rolled, float extra = 0)
 {
     GraphicsState st = g.Save();
     g.TranslateTransform(ox, oy);
     g.ScaleTransform(s, s);
-    Pen bar(fg, 1.8f);
+    Pen bar(fg, 1.8f + extra);
     bar.SetStartCap(LineCapRound);
     bar.SetEndCap(LineCapRound);
     g.DrawLine(&bar, 3.0f, 3.5f, 13.0f, 3.5f); // the title bar that stays
-    Pen pen(fg, 1.2f);
+    Pen pen(fg, 1.2f + extra);
     pen.SetLineJoin(LineJoinRound);
     pen.SetStartCap(LineCapRound);
     pen.SetEndCap(LineCapRound);
@@ -114,8 +116,14 @@ void RenderBar(HWND bar, const RECT& rc, const ButtonDraw* btns, int count, UINT
                 g.FillRectangle(&hb, x, 0.0f, bw, (float)h);
             }
             float ox = x + (bw - 16 * s) / 2, oy = (h - 16 * s) / 2;
-            if (btns[i].type == BTN_PIN) DrawPin(g, ox, oy, s, fg, btns[i].active);
-            else DrawRoll(g, ox, oy, s, fg, btns[i].active);
+            Color halo(dark ? 150 : 170, dark ? 0 : 255, dark ? 0 : 255, dark ? 0 : 255);
+            if (btns[i].type == BTN_PIN) {
+                DrawPin(g, ox, oy, s, halo, btns[i].active, 2.0f);
+                DrawPin(g, ox, oy, s, fg, btns[i].active);
+            } else {
+                DrawRoll(g, ox, oy, s, halo, btns[i].active, 2.0f);
+                DrawRoll(g, ox, oy, s, fg, btns[i].active);
+            }
         }
     }
     POINT dst = { rc.left, rc.top }, src = { 0, 0 };

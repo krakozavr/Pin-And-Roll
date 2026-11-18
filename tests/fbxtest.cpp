@@ -20,7 +20,9 @@ static const wchar_t* kTargetProp = L"FbxTarget";
 
 static int g_fail = 0, g_pass = 0;
 static std::wstring g_fbx, g_ini, g_shot;
-static HWND g_target, g_second;
+static HWND g_target, g_second, g_custom;
+// Layout of the self-drawn title bar of the "custom" test window (pixels at 96 dpi).
+enum { CT_H = 48, CT_BTN = 60, CT_CTRL = 90 };
 static HANDLE g_ready;
 static PROCESS_INFORMATION g_pi;
 
@@ -46,6 +48,52 @@ static LRESULT CALLBACK TargetProc(HWND w, UINT m, WPARAM wp, LPARAM lp)
     return DefWindowProcW(w, m, wp, lp);
 }
 
+// A window that draws its own title bar the way browsers and Electron apps
+// do: no non-client area, three wide buttons, and a control next to them.
+static LRESULT CALLBACK CustomProc(HWND w, UINT m, WPARAM wp, LPARAM lp)
+{
+    int dpi = (int)GetDpiForWindow(w);
+    auto D = [dpi](int v) { return MulDiv(v, dpi, 96); };
+    switch (m) {
+    case WM_NCCALCSIZE:
+        if (wp) return 0;
+        break;
+    case WM_NCHITTEST: {
+        RECT r;
+        GetWindowRect(w, &r);
+        int x = (short)LOWORD(lp), y = (short)HIWORD(lp);
+        if (x < r.left || x >= r.right || y < r.top || y >= r.bottom) return HTNOWHERE;
+        if (y >= r.top + D(CT_H)) return HTCLIENT;
+        int fromRight = r.right - x;
+        if (fromRight <= D(CT_BTN)) return HTCLOSE;
+        if (fromRight <= 2 * D(CT_BTN)) return HTMAXBUTTON;
+        if (fromRight <= 3 * D(CT_BTN)) return HTMINBUTTON;
+        if (fromRight <= 3 * D(CT_BTN) + D(CT_CTRL)) return HTCLIENT; // the app's own control
+        return HTCAPTION;
+    }
+    case WM_PAINT: {
+        PAINTSTRUCT ps;
+        HDC dc = BeginPaint(w, &ps);
+        RECT c;
+        GetClientRect(w, &c);
+        RECT bar = { 0, 0, c.right, D(CT_H) };
+        HBRUSH b1 = CreateSolidBrush(RGB(32, 32, 40)), b2 = CreateSolidBrush(RGB(200, 120, 0)),
+               b3 = CreateSolidBrush(RGB(90, 90, 110));
+        FillRect(dc, &bar, b1);
+        RECT ctrl = { c.right - 3 * D(CT_BTN) - D(CT_CTRL), D(8), c.right - 3 * D(CT_BTN) - D(6), D(CT_H) - D(8) };
+        FillRect(dc, &ctrl, b2);
+        for (int i = 0; i < 3; i++) {
+            RECT bt = { c.right - (i + 1) * D(CT_BTN) + D(4), D(4), c.right - i * D(CT_BTN) - D(4), D(CT_H) - D(4) };
+            FillRect(dc, &bt, b3);
+        }
+        DeleteObject(b1); DeleteObject(b2); DeleteObject(b3);
+        EndPaint(w, &ps);
+        return 0;
+    }
+    }
+    return DefWindowProcW(w, m, wp, lp);
+}
+
 static DWORD WINAPI TargetThread(void*)
 {
     WNDCLASSW wc = {};
@@ -58,6 +106,12 @@ static DWORD WINAPI TargetThread(void*)
     g_target = CreateWindowExW(0, wc.lpszClassName, L"FBX test window", WS_OVERLAPPEDWINDOW, 200, 150, 700, 450,
                                nullptr, nullptr, wc.hInstance, nullptr);
     g_second = CreateWindowExW(0, wc.lpszClassName, L"FBX second window", WS_OVERLAPPEDWINDOW, 260, 420, 500, 300,
+                               nullptr, nullptr, wc.hInstance, nullptr);
+    WNDCLASSW cc = wc;
+    cc.lpfnWndProc = CustomProc;
+    cc.lpszClassName = L"FbxTestCustom";
+    RegisterClassW(&cc);
+    g_custom = CreateWindowExW(0, cc.lpszClassName, L"FBX custom title bar", WS_OVERLAPPEDWINDOW, 300, 480, 760, 260,
                                nullptr, nullptr, wc.hInstance, nullptr);
     ShowWindow(g_target, SW_SHOWNORMAL);
     SetEvent(g_ready);
@@ -301,6 +355,70 @@ int wmain(int argc, wchar_t** argv)
     Check(WaitFor([&] { return FindBar(g_second) != nullptr; }), "a newly shown window gets buttons");
     ShowWindow(g_second, SW_HIDE);
     Check(WaitFor([&] { return FindBar(g_second) == nullptr; }), "buttons hide with their window");
+
+    // --- a program that draws its own (taller, wider) title bar
+    ShowWindow(g_custom, SW_SHOWNOACTIVATE);
+    Check(WaitFor([&] { return FindBar(g_custom) != nullptr; }), "custom title bar: window gets buttons");
+    Sleep(900);
+    if (HWND cbar = FindBar(g_custom)) {
+        RECT c = Rect(g_custom), b = Rect(cbar);
+        int ctrlLeft = c.right - 3 * D(CT_BTN) - D(CT_CTRL);
+        int mid = (b.top + b.bottom) / 2 - c.top;
+        printf("custom: window %ld,%ld-%ld,%ld bar %ld,%ld-%ld,%ld (app control starts at x=%d, title bar %d px)\n", c.left,
+               c.top, c.right, c.bottom, b.left, b.top, b.right, b.bottom, ctrlLeft, D(CT_H));
+        Check(b.right <= ctrlLeft && b.right >= ctrlLeft - D(20),
+              "custom title bar: buttons go into free space left of the app's own control");
+        Check(mid >= D(CT_H) / 2 - D(3) && mid <= D(CT_H) / 2 + D(3),
+              "custom title bar: buttons are centred in the real (taller) title bar");
+        SetForegroundWindow(g_custom);
+        Sleep(1300);
+        RECT area = { c.right - D(420), c.top - 4, c.right + 4, c.top + D(CT_H) + D(12) };
+        Shot(area, L"custom");
+        int ch0 = Height(g_custom);
+        ClickRoll(g_custom);
+        Check(WaitFor([&] { return Height(g_custom) >= D(CT_H) && Height(g_custom) <= D(CT_H) + D(12); }),
+              "custom title bar: rolls up to its real title bar height");
+        ClickRoll(g_custom);
+        Check(WaitFor([&] { return Height(g_custom) == ch0; }), "custom title bar: unrolls");
+    }
+    ShowWindow(g_custom, SW_HIDE);
+    SetForegroundWindow(t);
+    Sleep(300);
+
+    // --- rolled, then maximized, then restored
+    ClickRoll(t);
+    Check(WaitFor([&] { return Height(t) < D(70); }), "roll before maximize");
+    ShowWindow(t, SW_MAXIMIZE);
+    Sleep(900);
+    ShowWindow(t, SW_RESTORE);
+    Sleep(900);
+    printf("after roll > maximize > restore: height %d\n", Height(t));
+    if (Height(t) < D(70)) {
+        ClickRoll(t);
+        Check(WaitFor([&] { return Height(t) == h0; }), "roll > maximize > restore: button still unrolls the window");
+    } else {
+        Check(Height(t) == h0, "roll > maximize > restore: window came back unrolled at its old height");
+    }
+    ClickRoll(t);
+    Check(WaitFor([&] { return Height(t) < D(70); }), "...and the button rolls it again");
+    ClickRoll(t);
+    WaitFor([&] { return Height(t) == h0; });
+
+    // --- maximized, then rolled, then restored
+    ShowWindow(t, SW_MAXIMIZE);
+    Sleep(900);
+    ClickRoll(t);
+    Check(WaitFor([&] { return Height(t) < D(70); }), "maximize > roll: maximized window rolls up");
+    ShowWindow(t, SW_RESTORE);
+    Sleep(900);
+    printf("after maximize > roll > restore: height %d\n", Height(t));
+    if (Height(t) < D(70)) ClickRoll(t);
+    Check(WaitFor([&] { return Height(t) == h0; }), "maximize > roll > restore: ends at the original height in at most one click");
+    ClickRoll(t);
+    Check(WaitFor([&] { return Height(t) < D(70); }), "...and the button rolls it again");
+    ClickRoll(t);
+    Check(WaitFor([&] { return Height(t) == h0; }), "...and unrolls it");
+    Sleep(300);
 
     // --- maximized
     ShowWindow(t, SW_MAXIMIZE);

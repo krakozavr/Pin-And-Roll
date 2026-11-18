@@ -24,15 +24,26 @@ struct Tracked {
     bool noPin = false, noRoll = false;
     int offset = 0, rollHeight = 0;
 
+    // Roll-up state. "suspended": rolled while not maximized, currently
+    // maximized (Windows will bring the strip back on restore).
     bool rolled = false, rollPending = false, forcedTopmost = false;
+    bool zoomedAtRoll = false, suspended = false;
     DWORD rollTick = 0;
-    int oldHeight = 0, rolledHeight = 0;
+    int oldHeight = 0, rolledHeight = 0, normalHeight = 0;
+
+    // Measured layout of a title bar the program draws itself.
+    bool probeValid = false, reprobe = true;
+    UINT probeDpi = 0;
+    bool probeZoomed = false;
+    int probeCount = 0, probeWidth = 0;
+    int probeFromRight = 0, probeHeight = 0, probeShift = 0;
+    DWORD probeTick = 0;
 
     ButtonType btn[2] = { BTN_NONE, BTN_NONE };
     int nBtn = 0;
     int hot = -1, pressed = -1;
     bool dark = false, needSample = true;
-    DWORD sampleTick = 0;
+    DWORD sampleTick = 0, sampleDue = 0; // sampleDue: not before this time (animations)
 
     // what is currently on screen, to avoid redundant work
     RECT shownRect = {};
@@ -147,63 +158,212 @@ void ApplyException(Tracked& t)
     t.rollHeight = r ? r->rollHeight : 0;
 }
 
-void ComputeGeometry(const Tracked& t, LONG style, LONG ex, const RECT& wr, int count, Geometry& g)
+struct Frame {
+    RECT wr, efb;
+    int top, right; // visible top / right edge (on screen when maximized)
+    bool zoomed, custom;
+    UINT dpi;
+};
+
+void GetFrame(HWND h, const RECT& wr, Frame& f)
 {
-    HWND h = t.hwnd;
-    UINT dpi = GetDpiForWindow(h);
-    if (!dpi) dpi = 96;
-    g.dpi = dpi;
-    auto D = [dpi](int v) { return MulDiv(v, (int)dpi, 96); };
-
+    f.wr = wr;
+    f.dpi = GetDpiForWindow(h);
+    if (!f.dpi) f.dpi = 96;
     // The visible frame; the window rectangle also covers invisible resize borders.
-    RECT efb = wr;
+    f.efb = wr;
     RECT r;
-    if (SUCCEEDED(DwmGetWindowAttribute(h, DWMWA_EXTENDED_FRAME_BOUNDS, &r, sizeof(r))) &&
-        r.right > r.left && r.bottom > r.top)
-        efb = r;
-
-    bool zoomed = IsZoomed(h) != 0;
-    int frameTop = efb.top, frameRight = efb.right;
-    if (zoomed) {
+    if (SUCCEEDED(DwmGetWindowAttribute(h, DWMWA_EXTENDED_FRAME_BOUNDS, &r, sizeof(r))) && r.right > r.left &&
+        r.bottom > r.top)
+        f.efb = r;
+    f.zoomed = IsZoomed(h) != 0;
+    f.top = f.efb.top;
+    f.right = f.efb.right;
+    if (f.zoomed) {
         MONITORINFO mi = {};
         mi.cbSize = sizeof(mi);
         if (GetMonitorInfoW(MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST), &mi)) {
-            if (frameTop < mi.rcMonitor.top) frameTop = mi.rcMonitor.top;
-            if (frameRight > mi.rcMonitor.right) frameRight = mi.rcMonitor.right;
+            if (f.top < mi.rcMonitor.top) f.top = mi.rcMonitor.top;
+            if (f.right > mi.rcMonitor.right) f.right = mi.rcMonitor.right;
         }
     }
+    // Does the client area reach the top edge? Then the program draws its
+    // own title bar (browsers, Electron, WinUI) and the system metrics lie.
+    POINT c = { 0, 0 };
+    f.custom = ClientToScreen(h, &c) && c.y - f.top < MulDiv(12, (int)f.dpi, 96);
+}
 
-    // Where are the minimize / maximize / close buttons? Ask the compositor.
-    RECT cb = {};
-    bool have = false;
-    if (SUCCEEDED(DwmGetWindowAttribute(h, DWMWA_CAPTION_BUTTON_BOUNDS, &cb, sizeof(cb)))) {
-        int cw = cb.right - cb.left, ch = cb.bottom - cb.top;
-        have = cw >= D(16) && ch >= D(12) && ch <= D(80) && cw <= wr.right - wr.left;
+bool HitTest(HWND h, int x, int y, LRESULT& code)
+{
+    POINT p = { x, y };
+    PhysicalToLogicalPointForPerMonitorDPI(h, &p);
+    DWORD_PTR res = 0;
+    if (!SendMessageTimeoutW(h, WM_NCHITTEST, 0, MAKELPARAM((short)p.x, (short)p.y), SMTO_ABORTIFHUNG | SMTO_BLOCK, 40,
+                             &res))
+        return false;
+    code = (LRESULT)res;
+    return true;
+}
+
+inline bool IsCaptionButton(LRESULT c)
+{
+    return c == HTCLOSE || c == HTMAXBUTTON || c == HTMINBUTTON || c == HTHELP;
+}
+
+// Ask a self-drawn title bar where its buttons really are, and where the
+// nearest free (draggable) space to their left is. The answers are stored
+// relative to the top right corner, so they stay valid while the window moves.
+void ProbeCustomTitleBar(Tracked& t, const Frame& f, LONG style, int count)
+{
+    HWND h = t.hwnd;
+    DWORD now = GetTickCount();
+    int width = f.wr.right - f.wr.left;
+    bool keyChanged = t.probeDpi != f.dpi || t.probeZoomed != f.zoomed || t.probeCount != count;
+    if (t.probeWidth != width) t.reprobe = true; // free space depends on the width
+    if (!keyChanged && !t.reprobe) return;
+    if (t.rolled && !t.suspended && t.probeDpi) return; // keep what we measured before rolling
+    if (now - t.probeTick < 400 && t.probeDpi) return;
+    t.probeTick = now;
+    t.probeDpi = f.dpi;
+    t.probeZoomed = f.zoomed;
+    t.probeCount = count;
+    t.probeWidth = width;
+    t.reprobe = false;
+    t.probeValid = false;
+    if (IsHungAppWindow(h)) return;
+
+    UINT dpi = f.dpi;
+    auto D = [dpi](int v) { return MulDiv(v, (int)dpi, 96); };
+    const int y0 = f.top + D(10), step = D(6);
+    LRESULT code;
+
+    // 1. scan leftwards from the right edge for the system-button area
+    int rightHit = -1, leftHit = -1, gap = 0;
+    int maxL = 0, maxR = -1;
+    bool sawMin = false, sawClose = false;
+    for (int x = f.right - D(3); x > f.right - D(400) && x > f.wr.left; x -= step) {
+        if (!HitTest(h, x, y0, code)) return;
+        if (IsCaptionButton(code)) {
+            if (rightHit < 0) rightHit = x;
+            leftHit = x;
+            gap = 0;
+            if (code == HTMINBUTTON) sawMin = true;
+            if (code == HTCLOSE) sawClose = true;
+            if (code == HTMAXBUTTON) {
+                if (maxR < 0) maxR = x;
+                maxL = x;
+            }
+        } else if (rightHit >= 0) {
+            if (++gap >= 3) break;
+        } else if (x < f.right - D(150)) {
+            return; // nothing there: not a title bar we can measure
+        }
     }
+    if (rightHit < 0) return;
+    for (int x = leftHit - 1; x > leftHit - step; x--) { // exact left edge
+        if (!HitTest(h, x, y0, code)) return;
+        if (!IsCaptionButton(code)) break;
+        leftHit = x;
+    }
+    int capL = leftHit;
+    int probeX = capL + D(8);
+    if (!sawMin && !sawClose && maxR >= 0) {
+        // Only the maximize button identifies itself; assume equal widths.
+        int w = maxR - maxL + step;
+        probeX = (maxL + maxR) / 2;
+        if (style & WS_MINIMIZEBOX) capL = maxL - w;
+    }
+
+    // 2. how tall are the buttons?
+    LRESULT base;
+    if (!HitTest(h, probeX, y0, base)) return;
+    int bottom = y0;
+    for (int y = y0 + D(3); y < f.top + D(96); y += D(3)) {
+        if (!HitTest(h, probeX, y, code)) return;
+        if (code != base) break;
+        bottom = y;
+    }
+    for (int y = bottom + 1; y < bottom + D(3); y++) {
+        if (!HitTest(h, probeX, y, code)) return;
+        if (code != base) break;
+        bottom = y;
+    }
+    int height = bottom + 1 - f.top;
+    if (height < D(16)) return;
+
+    // 3. nearest free stretch of title bar left of the buttons
+    const int fs = D(8), barW = count * D(32) + D(2), yc = f.top + height / 2;
+    const int need = (barW + fs - 1) / fs + 1;
+    int run = 0, shift = 0;
+    bool found = false;
+    for (int i = 0; i < D(260) / fs + need; i++) {
+        int x = capL - D(3) - i * fs;
+        if (x <= f.wr.left) break;
+        if (!HitTest(h, x, yc, code)) return;
+        run = code == HTCAPTION ? run + 1 : 0;
+        if (run >= need) {
+            shift = (i + 1 - need) * fs;
+            found = true;
+            break;
+        }
+    }
+    t.probeFromRight = f.right - capL;
+    t.probeHeight = height;
+    t.probeShift = found ? shift : 0;
+    t.probeValid = true;
+}
+
+void ComputeGeometry(const Tracked& t, LONG style, LONG ex, const Frame& f, int count, Geometry& g)
+{
+    HWND h = t.hwnd;
+    const RECT& wr = f.wr;
+    UINT dpi = f.dpi;
+    g.dpi = dpi;
+    auto D = [dpi](int v) { return MulDiv(v, (int)dpi, 96); };
+
     int capL, capR, capT, capB;
-    if (have) {
-        capL = wr.left + cb.left;
-        capR = wr.left + cb.right;
-        capT = wr.top + cb.top;
-        capB = wr.top + cb.bottom;
-        if (capT < frameTop) capT = frameTop;
-        if (capB < capT + D(12)) capB = capT + D(30);
+    int extraShift = 0;
+    bool measured = false; // caption button rectangle is known, not guessed
+    if (f.custom && t.probeValid) {
+        capR = f.right;
+        capL = f.right - t.probeFromRight;
+        capT = f.top;
+        capB = capT + t.probeHeight;
+        extraShift = t.probeShift;
+        measured = true;
     } else {
-        // No answer (custom-drawn title bar): assume the standard layout.
-        int n = 1;
-        if (style & (WS_MINIMIZEBOX | WS_MAXIMIZEBOX)) n = 3;
-        else if (ex & WS_EX_CONTEXTHELP) n = 2;
-        capR = frameRight;
-        capL = capR - n * D(46);
-        capT = frameTop;
-        capB = capT + D(30);
+        // Where are the minimize / maximize / close buttons? Ask the compositor.
+        RECT cb = {};
+        bool have = false;
+        if (SUCCEEDED(DwmGetWindowAttribute(h, DWMWA_CAPTION_BUTTON_BOUNDS, &cb, sizeof(cb)))) {
+            int cw = cb.right - cb.left, ch = cb.bottom - cb.top;
+            have = cw >= D(16) && ch >= D(12) && ch <= D(80) && cw <= wr.right - wr.left;
+        }
+        if (have) {
+            capL = wr.left + cb.left;
+            capR = wr.left + cb.right;
+            capT = wr.top + cb.top;
+            capB = wr.top + cb.bottom;
+            if (capT < f.top) capT = f.top;
+            if (capB < capT + D(12)) capB = capT + D(30);
+            measured = true;
+        } else {
+            // No answer: assume the standard layout.
+            int n = 1;
+            if (style & (WS_MINIMIZEBOX | WS_MAXIMIZEBOX)) n = 3;
+            else if (ex & WS_EX_CONTEXTHELP) n = 2;
+            capR = f.right;
+            capL = capR - n * D(46);
+            capT = f.top;
+            capB = capT + D(30);
+        }
     }
 
     int capH = capB - capT;
     int bh = Clamp(capH, D(20), D(32));
     int bw = D(32);
     int top = capT + (capH - bh) / 2;
-    int shift = D(2) + D(g_cfg.moveLeft) + (zoomed ? D(g_cfg.moveLeftMaximized) : 0) + D(t.offset);
+    int shift = D(2) + extraShift + D(g_cfg.moveLeft) + (f.zoomed ? D(g_cfg.moveLeftMaximized) : 0) + D(t.offset);
     bool mirrored = (capL + capR) / 2 < (wr.left + wr.right) / 2; // right-to-left windows
     if (!mirrored) {
         g.bar.right = capL - shift;
@@ -215,12 +375,12 @@ void ComputeGeometry(const Tracked& t, LONG style, LONG ex, const RECT& wr, int 
     g.bar.top = top;
     g.bar.bottom = top + bh;
 
-    int invisibleBottom = wr.bottom - efb.bottom;
+    int invisibleBottom = wr.bottom - f.efb.bottom;
     if (invisibleBottom < 0 || invisibleBottom > D(24)) invisibleBottom = 0;
     int captionBottom;
-    if (have)
+    if (measured)
         captionBottom = capB - wr.top;
-    else if ((style & WS_CAPTION) == WS_CAPTION)
+    else if ((style & WS_CAPTION) == WS_CAPTION && !f.custom)
         captionBottom = GetSystemMetricsForDpi(SM_CYCAPTION, dpi) + GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) +
                         GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
     else
@@ -249,7 +409,7 @@ void ClearRollProps(HWND h)
 void ClearRolled(Tracked& t)
 {
     bool forced = t.forcedTopmost;
-    t.rolled = t.rollPending = t.forcedTopmost = false;
+    t.rolled = t.rollPending = t.forcedTopmost = t.suspended = t.zoomedAtRoll = false;
     ClearRollProps(t.hwnd);
     if (forced)
         SetWindowPos(t.hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
@@ -282,7 +442,7 @@ void PlaceAbove(Tracked& t, bool topmost)
 void SampleBackground(Tracked& t, const RECT& bar, UINT dpi)
 {
     DWORD now = GetTickCount();
-    if (now - t.sampleTick < 700) return;
+    if ((int)(now - t.sampleDue) < 0 || now - t.sampleTick < 700) return;
     t.sampleTick = now;
     POINT pt = { bar.left - MulDiv(5, (int)dpi, 96), 0 };
     int ys[3] = { bar.top + (bar.bottom - bar.top) / 4, (bar.top + bar.bottom) / 2,
@@ -292,6 +452,9 @@ void SampleBackground(Tracked& t, const RECT& bar, UINT dpi)
     int guard = 0;
     for (HWND w = GetTopWindow(nullptr); w && w != t.hwnd && guard < 4000; w = GetWindow(w, GW_HWNDNEXT), guard++) {
         if (w == t.bar || !IsWindowVisible(w) || IsIconic(w)) continue;
+        LONG wex = GetWindowLongW(w, GWL_EXSTYLE);
+        // click-through overlays (screen tools, input helpers) are not real covers
+        if ((wex & WS_EX_TRANSPARENT) || ((wex & WS_EX_LAYERED) && (wex & WS_EX_NOACTIVATE))) continue;
         RECT r;
         if (!GetWindowRect(w, &r)) continue;
         if (pt.x >= r.left && pt.x < r.right && ys[2] >= r.top && ys[0] < r.bottom) {
@@ -315,6 +478,15 @@ void SampleBackground(Tracked& t, const RECT& bar, UINT dpi)
     t.needSample = false;
 }
 
+// Look at the title bar colour again, but only after window animations
+// (restore, activation) have finished - sampling mid-animation reads
+// whatever is behind the window.
+void RequestSample(Tracked& t)
+{
+    t.needSample = true;
+    t.sampleDue = GetTickCount() + 450;
+}
+
 LRESULT CALLBACK BarProc(HWND, UINT, WPARAM, LPARAM);
 
 void UpdateBar(Tracked& t)
@@ -331,11 +503,26 @@ void UpdateBar(Tracked& t)
     bool iconic = IsIconic(h) != 0;
 
     if (t.rolled && !iconic) {
-        int height = wr.bottom - wr.top;
-        if (Abs(height - t.rolledHeight) <= 2)
-            t.rollPending = false;
-        else if (!t.rollPending || GetTickCount() - t.rollTick > 1500)
-            ClearRolled(t); // resized by the user or the program: treat as unrolled
+        bool strip = Abs((wr.bottom - wr.top) - t.rolledHeight) <= 2;
+        bool zoomed = IsZoomed(h) != 0;
+        if (t.rollPending) {
+            if (strip) t.rollPending = false;
+            else if (GetTickCount() - t.rollTick > 1500) ClearRolled(t); // the roll did not take
+        } else if (zoomed == t.zoomedAtRoll) {
+            if (strip) t.suspended = false;
+            else ClearRolled(t); // resized by the user or the program: treat as unrolled
+        } else if (zoomed) {
+            // Rolled, then maximized: it shows in full for now. Windows brings
+            // the strip back on restore, and so do we.
+            t.suspended = true;
+        } else if (strip && t.normalHeight > t.rolledHeight + 2) {
+            // Rolled while maximized, then restored as a strip.
+            t.zoomedAtRoll = t.suspended = false;
+            t.oldHeight = t.normalHeight;
+            SetPropW(h, FBX_PROP_OLDHEIGHT, (HANDLE)(INT_PTR)t.oldHeight);
+        } else {
+            ClearRolled(t);
+        }
     }
 
     t.nBtn = 0;
@@ -346,7 +533,10 @@ void UpdateBar(Tracked& t)
                 !IsFullscreen(h, wr);
     Geometry g = {};
     if (show) {
-        ComputeGeometry(t, style, ex, wr, t.nBtn, g);
+        Frame f;
+        GetFrame(h, wr, f);
+        if (f.custom) ProbeCustomTitleBar(t, f, style, t.nBtn);
+        ComputeGeometry(t, style, ex, f, t.nBtn, g);
         // not enough room in a very narrow window
         if (g.bar.left < wr.left || g.bar.right > wr.right) show = false;
     }
@@ -364,13 +554,15 @@ void UpdateBar(Tracked& t)
         t.shownCount = 0;
     }
 
+    if (!IsWindowVisible(t.bar)) RequestSample(t); // coming back from hidden / minimized
+    else if (!t.needSample && GetTickCount() - t.sampleTick > 3000) t.needSample = true; // periodic self-check
     if (t.needSample) SampleBackground(t, g.bar, g.dpi);
 
     bool topmost = (ex & WS_EX_TOPMOST) != 0;
     ButtonDraw bd[2] = {};
     for (int i = 0; i < t.nBtn; i++) {
         bd[i].type = t.btn[i];
-        bd[i].active = t.btn[i] == BTN_PIN ? topmost : t.rolled;
+        bd[i].active = t.btn[i] == BTN_PIN ? topmost : (t.rolled && !t.suspended);
         bd[i].hot = t.hot == i;
         bd[i].pressed = t.pressed == i && t.hot == i;
     }
@@ -417,6 +609,7 @@ Tracked* TryTrack(HWND h)
     t.hwnd = h;
     t.exe = exe;
     t.dark = g_sysDark;
+    RequestSample(t);
     ApplyException(t);
 
     // Adopt a window that was rolled up by a previous instance of FBX.
@@ -426,7 +619,8 @@ Tracked* TryTrack(HWND h)
         GetWindowRect(h, &wr);
         int rh = (int)(INT_PTR)GetPropW(h, FBX_PROP_ROLLEDHEIGHT);
         t.rolled = true;
-        t.oldHeight = oldH;
+        t.oldHeight = t.normalHeight = oldH;
+        t.zoomedAtRoll = IsZoomed(h) != 0;
         t.rolledHeight = rh > 0 ? rh : wr.bottom - wr.top;
         t.forcedTopmost = GetPropW(h, FBX_PROP_FORCEDTOP) != nullptr;
     }
@@ -442,30 +636,60 @@ void Untrack(HWND h)
     g_win.erase(it);
 }
 
+int NormalHeight(HWND h)
+{
+    WINDOWPLACEMENT wp = {};
+    wp.length = sizeof(wp);
+    if (!GetWindowPlacement(h, &wp)) return 0;
+    return wp.rcNormalPosition.bottom - wp.rcNormalPosition.top;
+}
+
 void Roll(Tracked& t)
 {
-    if (t.rolled || IsIconic(t.hwnd)) return;
+    if ((t.rolled && !t.suspended) || IsIconic(t.hwnd)) return;
     HWND h = t.hwnd;
     RECT wr;
     if (!GetWindowRect(h, &wr)) return;
     LONG style = GetWindowLongW(h, GWL_STYLE), ex = GetWindowLongW(h, GWL_EXSTYLE);
+    Frame f;
+    GetFrame(h, wr, f);
     Geometry g = {};
-    ComputeGeometry(t, style, ex, wr, t.nBtn ? t.nBtn : 1, g);
-    int height = wr.bottom - wr.top;
-    if (height <= g.rolledHeight + 2) return;
+    ComputeGeometry(t, style, ex, f, t.nBtn ? t.nBtn : 1, g);
+    int height = wr.bottom - wr.top, width = wr.right - wr.left;
+    const UINT keep = SWP_NOMOVE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS;
+
+    if (height <= g.rolledHeight + 2) {
+        // Already just a title bar and we do not know why. Never leave the
+        // button dead: open the window to a sensible height.
+        int nh = NormalHeight(h);
+        if (nh <= g.rolledHeight + MulDiv(60, (int)g.dpi, 96)) nh = MulDiv(480, (int)g.dpi, 96);
+        ClearRolled(t);
+        SetWindowPos(h, nullptr, 0, 0, width, nh, keep | SWP_NOZORDER);
+        Burst();
+        return;
+    }
+
+    // Height to return to once the window is neither rolled nor maximized.
+    int normal = height;
+    if (t.rolled && t.suspended) normal = t.oldHeight;      // was rolled before it got maximized
+    else if (f.zoomed) normal = NormalHeight(h);
+    bool forced = t.forcedTopmost || (g_cfg.rolledTopmost && !(ex & WS_EX_TOPMOST));
 
     t.oldHeight = height;
+    t.normalHeight = normal;
     t.rolledHeight = g.rolledHeight;
-    t.forcedTopmost = g_cfg.rolledTopmost && !(ex & WS_EX_TOPMOST);
+    t.zoomedAtRoll = f.zoomed;
+    t.suspended = false;
+    t.forcedTopmost = forced;
     SetPropW(h, FBX_PROP_OLDHEIGHT, (HANDLE)(INT_PTR)t.oldHeight);
     SetPropW(h, FBX_PROP_ROLLEDHEIGHT, (HANDLE)(INT_PTR)t.rolledHeight);
-    if (t.forcedTopmost) SetPropW(h, FBX_PROP_FORCEDTOP, (HANDLE)(INT_PTR)1);
+    if (forced) SetPropW(h, FBX_PROP_FORCEDTOP, (HANDLE)(INT_PTR)1);
 
     // SWP_NOSENDCHANGING lets the window go below its normal minimum size
     // (the original FbX subclassed the window to achieve the same).
-    UINT f = SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOSENDCHANGING | SWP_ASYNCWINDOWPOS;
-    if (!g_cfg.rolledTopmost) f |= SWP_NOZORDER;
-    SetWindowPos(h, g_cfg.rolledTopmost ? HWND_TOPMOST : nullptr, 0, 0, wr.right - wr.left, t.rolledHeight, f);
+    UINT fl = keep | SWP_NOSENDCHANGING;
+    if (!g_cfg.rolledTopmost) fl |= SWP_NOZORDER;
+    SetWindowPos(h, g_cfg.rolledTopmost ? HWND_TOPMOST : nullptr, 0, 0, width, t.rolledHeight, fl);
     t.rolled = true;
     t.rollPending = true;
     t.rollTick = GetTickCount();
@@ -477,13 +701,24 @@ void Unroll(Tracked& t)
     if (!t.rolled) return;
     HWND h = t.hwnd;
     int oldH = t.oldHeight;
+    bool suspended = t.suspended;
     RECT wr;
     bool ok = GetWindowRect(h, &wr) != 0;
     ClearRolled(t);
-    // Like FbX: keep the current position and width, restore the height.
-    if (ok)
+    if (suspended) {
+        // Maximized right now; only its remembered normal size is a strip.
+        WINDOWPLACEMENT wp = {};
+        wp.length = sizeof(wp);
+        if (GetWindowPlacement(h, &wp)) {
+            wp.rcNormalPosition.bottom = wp.rcNormalPosition.top + oldH;
+            wp.flags = WPF_ASYNCWINDOWPLACEMENT;
+            SetWindowPlacement(h, &wp);
+        }
+    } else if (ok) {
+        // Like FbX: keep the current position and width, restore the height.
         SetWindowPos(h, nullptr, 0, 0, wr.right - wr.left, oldH,
                      SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+    }
     Burst();
 }
 
@@ -506,7 +741,7 @@ void DoButton(Tracked& t, ButtonType b)
     if (b == BTN_PIN)
         TogglePin(t);
     else if (b == BTN_ROLL) {
-        if (t.rolled) Unroll(t);
+        if (t.rolled && !t.suspended) Unroll(t);
         else Roll(t);
     }
 }
@@ -597,9 +832,12 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD ev, HWND hwnd, LONG idObject, LO
     if (ev == EVENT_SYSTEM_FOREGROUND) {
         // Title bar colours change with activation.
         auto prev = g_win.find(g_lastForeground);
-        if (prev != g_win.end()) prev->second.needSample = true;
+        if (prev != g_win.end()) RequestSample(prev->second);
         g_lastForeground = hwnd;
-        if (it != g_win.end()) it->second.needSample = true;
+        if (it != g_win.end()) {
+            RequestSample(it->second);
+            it->second.reprobe = true;
+        }
         Burst();
     }
     if (it != g_win.end())
