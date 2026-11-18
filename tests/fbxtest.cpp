@@ -56,8 +56,7 @@ static LRESULT CALLBACK CustomProc(HWND w, UINT m, WPARAM wp, LPARAM lp)
     auto D = [dpi](int v) { return MulDiv(v, dpi, 96); };
     switch (m) {
     case WM_NCCALCSIZE:
-        if (wp) return 0;
-        break;
+        return 0; // no non-client area at all: the client covers the whole window
     case WM_NCHITTEST: {
         RECT r;
         GetWindowRect(w, &r);
