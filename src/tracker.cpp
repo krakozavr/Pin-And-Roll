@@ -1000,6 +1000,65 @@ void TrackerListApps(std::vector<std::pair<std::wstring, std::wstring>>& out)
     }
 }
 
+void TrackerDiagnostics(std::wstring& out)
+{
+    wchar_t b[512];
+    swprintf(b, 512, L"FBX diagnostics. elevated=%d size=%d%% moveLeft=%d/%d\r\n"
+                     L"Hit-test letters, read from the right edge leftwards in 6 px steps:\r\n"
+                     L"  X close, x maximize, m minimize, C draggable title bar, c program control, . other\r\n\r\n",
+             IsElevated(), g_cfg.size, g_cfg.moveLeft, g_cfg.moveLeftMaximized);
+    out += b;
+    for (auto& kv : g_win) {
+        Tracked& t = kv.second;
+        HWND h = t.hwnd;
+        if (!IsWindowVisible(h) || IsIconic(h)) continue;
+        wchar_t cls[80] = L"";
+        GetClassNameW(h, cls, 80);
+        RECT wr;
+        GetWindowRect(h, &wr);
+        Frame f;
+        GetFrame(h, wr, f);
+        RECT cb = {};
+        HRESULT hr = DwmGetWindowAttribute(h, DWMWA_CAPTION_BUTTON_BOUNDS, &cb, sizeof(cb));
+        POINT c = { 0, 0 };
+        ClientToScreen(h, &c);
+        swprintf(b, 512,
+                 L"%ls  [%ls]\r\n  dpi %u  maximized %d  rolled %d  rule: left=%d manual=%d offset=%d down=%d size=%d\r\n"
+                 L"  window %ld,%ld-%ld,%ld  frame %ld,%ld-%ld,%ld  client top %ld  self-drawn title bar: %d\r\n",
+                 t.exe.c_str(), cls, f.dpi, f.zoomed, t.rolled, t.left, t.manual, t.offset, t.down, t.size, wr.left,
+                 wr.top, wr.right, wr.bottom, f.efb.left, f.efb.top, f.efb.right, f.efb.bottom, c.y, f.custom);
+        out += b;
+        swprintf(b, 512,
+                 L"  compositor buttons %ld,%ld-%ld,%ld (hr %08lx)\r\n"
+                 L"  measured: valid=%d buttons start %d px from right, height %d, free next to them %d, auto shift %d\r\n"
+                 L"  our bar %ld,%ld-%ld,%ld  dark=%d\r\n",
+                 cb.left, cb.top, cb.right, cb.bottom, (unsigned long)hr, t.probeValid, t.probeFromRight, t.probeHeight,
+                 t.probeFreeAdjacent, t.probeShift, t.shownRect.left, t.shownRect.top, t.shownRect.right,
+                 t.shownRect.bottom, t.dark);
+        out += b;
+        int step = MulDiv(6, (int)f.dpi, 96);
+        for (int row = 0; row < 2; row++) {
+            int y = f.top + MulDiv(row == 0 ? 10 : 22, (int)f.dpi, 96);
+            std::wstring line = row == 0 ? L"  y+10: " : L"  y+22: ";
+            if (IsHungAppWindow(h)) {
+                line += L"(not responding)";
+            } else {
+                for (int x = f.right - MulDiv(3, (int)f.dpi, 96), n = 0; n < 80 && x > wr.left; x -= step, n++) {
+                    LRESULT code;
+                    if (!HitTest(h, x, y, code)) {
+                        line += L'?';
+                        break;
+                    }
+                    line += code == HTCLOSE ? L'X' : code == HTMAXBUTTON ? L'x' : code == HTMINBUTTON ? L'm'
+                          : code == HTCAPTION ? L'C' : code == HTCLIENT ? L'c' : L'.';
+                }
+            }
+            out += line + L"\r\n";
+        }
+        out += L"\r\n";
+    }
+}
+
 void TrackerUnrollAll()
 {
     for (auto& kv : g_win)

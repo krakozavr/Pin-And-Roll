@@ -5,7 +5,7 @@
 
 #define FBX_VERSION L"3.0.0-preview"
 #define WM_TRAY (WM_APP + 1)
-enum { IDM_PIN = 100, IDM_ROLL, IDM_ROLLTOP, IDM_SETTINGS, IDM_EDIT, IDM_RELOAD, IDM_ABOUT, IDM_EXIT };
+enum { IDM_PIN = 100, IDM_ROLL, IDM_ROLLTOP, IDM_SETTINGS, IDM_EDIT, IDM_RELOAD, IDM_ABOUT, IDM_EXIT, IDM_DIAG };
 enum { HK_PIN = 1, HK_ROLL = 2 };
 
 static HINSTANCE g_hinst;
@@ -78,6 +78,7 @@ static void ShowMenu(HWND wnd)
     SetMenuDefaultItem(m, IDM_SETTINGS, FALSE);
     AppendMenuW(m, MF_STRING, IDM_EDIT, L"Open settings file (hot keys)");
     AppendMenuW(m, MF_STRING, IDM_RELOAD, L"Reload settings file");
+    AppendMenuW(m, MF_STRING, IDM_DIAG, L"Save diagnostics...");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, IDM_ABOUT, L"About");
     AppendMenuW(m, MF_STRING, IDM_EXIT, L"Exit");
@@ -131,6 +132,22 @@ static LRESULT CALLBACK MainProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         case IDM_SETTINGS:
             ShowSettings(g_hinst);
             break;
+        case IDM_DIAG: {
+            std::wstring text, file;
+            TrackerDiagnostics(text);
+            wchar_t tmp[MAX_PATH];
+            GetTempPathW(MAX_PATH, tmp);
+            file = std::wstring(tmp) + L"fbx-diagnostics.txt";
+            HANDLE f = CreateFileW(file.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (f != INVALID_HANDLE_VALUE) {
+                DWORD w;
+                WriteFile(f, "\xFF\xFE", 2, &w, nullptr);
+                WriteFile(f, text.c_str(), (DWORD)(text.size() * sizeof(wchar_t)), &w, nullptr);
+                CloseHandle(f);
+                ShellExecuteW(wnd, L"open", L"notepad.exe", (L"\"" + file + L"\"").c_str(), nullptr, SW_SHOWNORMAL);
+            }
+            break;
+        }
         case IDM_EDIT:
             ShellExecuteW(wnd, L"open", L"notepad.exe", (L"\"" + g_cfg.path + L"\"").c_str(), nullptr, SW_SHOWNORMAL);
             break;

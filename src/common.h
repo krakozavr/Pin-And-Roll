@@ -103,6 +103,9 @@ void TrackerListApps(std::vector<std::pair<std::wstring, std::wstring>>& out);
 void AppRegisterHotkeys();
 bool AppRestartElevated(); // false if the user declined the Windows prompt
 
+// Text report of how each window's title bar was measured (no window titles).
+void TrackerDiagnostics(std::wstring& out);
+
 // settings.cpp
 void ShowSettings(HINSTANCE inst);
 #define FBX_TIMER_SLOW 1
