@@ -4,7 +4,7 @@
 #include <shellapi.h>
 #include "resource.h"
 
-#define PR_VERSION L"3.0.0-preview"
+#define PR_VERSION L"1.0.0"
 #define WM_TRAY (WM_APP + 1)
 enum { IDM_PIN = 100, IDM_ROLL, IDM_ROLLTOP, IDM_SETTINGS, IDM_EDIT, IDM_RELOAD, IDM_ABOUT, IDM_EXIT, IDM_DIAG, IDM_HELP };
 enum { HK_PIN = 1, HK_ROLL = 2 };

@@ -1,0 +1,41 @@
+name: release
+
+# Pushing a tag such as v1.0.0 builds, tests and publishes pr.exe as a release.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -B build -A x64
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Integration test
+        timeout-minutes: 5
+        run: build\Release\prtest.exe build\Release\pr.exe
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $hash = (Get-FileHash build\Release\pr.exe -Algorithm SHA256).Hash.ToLower()
+          $notes = @"
+          Pin&Roll $tag for Windows 10 and 11 (64-bit; also runs on ARM64 Windows).
+
+          Download ``pr.exe`` below and run it. There is no installer.
+
+          The program is not signed, so your browser and Windows may warn about it;
+          see the README for what to expect and how to build it yourself.
+
+          SHA-256 of pr.exe: ``$hash``
+          "@
+          $notes | Out-File -Encoding utf8 notes.md
+          gh release create $tag build\Release\pr.exe --title "Pin&Roll $tag" --notes-file notes.md
