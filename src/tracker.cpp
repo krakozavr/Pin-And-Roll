@@ -25,6 +25,11 @@ struct Tracked {
     bool left = false, manual = false; // manual: position set by the user, no automatic search
     int offset = 0, rollHeight = 0;
     int size = 0, down = 0;
+    int peekRule = -1;
+
+    // Peek: a rolled-up window shown in full while the mouse is over it.
+    bool peeking = false;
+    int peekCount = 0;
 
     // The user is dragging the window (system move/size loop).
     bool inMoveSize = false, moveIsResize = false;
@@ -151,6 +156,22 @@ bool ProcessInfo(HWND h, std::wstring& exeLower)
     }
     DWORD integ = TokenIntegrity(p);
     CloseHandle(p);
+    if (exeLower == L"applicationframehost.exe") {
+        // Store apps all live in this host; the real program owns the content window inside.
+        HWND core = FindWindowExW(h, nullptr, L"Windows.UI.Core.CoreWindow", nullptr);
+        DWORD cpid = 0;
+        if (core) GetWindowThreadProcessId(core, &cpid);
+        HANDLE cp = cpid && cpid != pid ? OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, cpid) : nullptr;
+        if (cp) {
+            n = (DWORD)(sizeof(path) / sizeof(path[0]));
+            if (QueryFullProcessImageNameW(cp, 0, path, &n)) {
+                const wchar_t* base = wcsrchr(path, L'\\');
+                exeLower = base ? base + 1 : path;
+                for (auto& c : exeLower) c = (wchar_t)towlower(c);
+            }
+            CloseHandle(cp);
+        }
+    }
     // A window of a higher integrity level (e.g. "Run as administrator")
     // ignores our requests, so do not show buttons that would do nothing.
     if (integ && g_myIntegrity && integ > g_myIntegrity) return false;
@@ -168,6 +189,7 @@ void ApplyException(Tracked& t)
     t.rollHeight = r ? r->rollHeight : 0;
     t.size = r ? r->size : 0;
     t.down = r ? r->down : 0;
+    t.peekRule = r ? r->peek : -1;
 }
 
 struct Frame {
@@ -446,7 +468,8 @@ void ClearRollProps(HWND h)
 void ClearRolled(Tracked& t)
 {
     bool forced = t.forcedTopmost;
-    t.rolled = t.rollPending = t.forcedTopmost = t.suspended = t.zoomedAtRoll = false;
+    t.rolled = t.rollPending = t.forcedTopmost = t.suspended = t.zoomedAtRoll = t.peeking = false;
+    t.peekCount = 0;
     ClearRollProps(t.hwnd);
     if (forced)
         SetWindowPos(t.hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
@@ -562,9 +585,10 @@ void UpdateBar(Tracked& t)
             Burst();
         }
         t.inMoveSize = moving;
+        if (moving) Burst(); // notice the end of the drag promptly
     }
 
-    if (t.rolled && !iconic && !(t.inMoveSize && !t.moveIsResize)) {
+    if (t.rolled && !iconic && !t.peeking && !(t.inMoveSize && !t.moveIsResize)) {
         bool strip = Abs((wr.bottom - wr.top) - t.rolledHeight) <= 2;
         bool zoomed = IsZoomed(h) != 0;
         if (t.rollPending) {
@@ -591,7 +615,7 @@ void UpdateBar(Tracked& t)
     if (g_cfg.roll && !t.noRoll) t.btn[t.nBtn++] = BTN_ROLL;
     if (g_cfg.pin && !t.noPin) t.btn[t.nBtn++] = BTN_PIN;
 
-    bool show = t.nBtn > 0 && !iconic && IsWindowVisible(h) && StyleEligible(style, ex) && !IsCloaked(h) &&
+    bool show = t.nBtn > 0 && !iconic && !t.inMoveSize && IsWindowVisible(h) && StyleEligible(style, ex) && !IsCloaked(h) &&
                 !IsFullscreen(h, wr);
     Geometry g = {};
     if (show) {
@@ -763,6 +787,11 @@ void Roll(Tracked& t)
 void Unroll(Tracked& t)
 {
     if (!t.rolled) return;
+    if (t.peeking) { // already shown in full: just keep it that way
+        ClearRolled(t);
+        Burst();
+        return;
+    }
     HWND h = t.hwnd;
     int oldH = t.oldHeight;
     bool suspended = t.suspended;
@@ -867,6 +896,22 @@ LRESULT CALLBACK BarProc(HWND bar, UINT msg, WPARAM wp, LPARAM lp)
             UpdateBar(*t);
         }
         return 0;
+    case WM_RBUTTONUP:
+        if (Tracked* t = FromBar(bar)) {
+            std::wstring exe = t->exe;
+            HMENU m = CreatePopupMenu();
+            AppendMenuW(m, MF_STRING, 1, (L"Customize " + exe + L"...").c_str());
+            AppendMenuW(m, MF_STRING, 2, L"Settings...");
+            POINT pt;
+            GetCursorPos(&pt);
+            SetForegroundWindow(g_main); // so that the menu closes on a click elsewhere
+            int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTBUTTON, pt.x, pt.y, 0, g_main, nullptr);
+            PostMessageW(g_main, WM_NULL, 0, 0);
+            DestroyMenu(m);
+            if (cmd == 1) AppOpenSettings(exe);
+            else if (cmd == 2) AppOpenSettings(L"");
+        }
+        return 0;
     case WM_NCDESTROY:
         RemovePropW(bar, FBX_PROP_TARGET);
         break;
@@ -891,6 +936,13 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD ev, HWND hwnd, LONG idObject, LO
         if (it != g_win.end()) {
             RequestSample(it->second);
             it->second.reprobe = true;
+            if (it->second.exe == L"applicationframehost.exe") { // hosted app may be known by now
+                std::wstring exe;
+                if (ProcessInfo(hwnd, exe) && exe != it->second.exe) {
+                    it->second.exe = exe;
+                    ApplyException(it->second);
+                }
+            }
         }
         Burst();
     }
@@ -961,6 +1013,95 @@ void TrackerRefreshAll()
     EnumWindows(EnumProc, 0);
 }
 
+namespace {
+
+// Topmost visible window at a point (ignoring click-through overlays).
+HWND TopWindowAt(POINT pt)
+{
+    int guard = 0;
+    for (HWND w = GetTopWindow(nullptr); w && guard < 4000; w = GetWindow(w, GW_HWNDNEXT), guard++) {
+        if (!IsWindowVisible(w) || IsIconic(w)) continue;
+        LONG ex = GetWindowLongW(w, GWL_EXSTYLE);
+        if (ex & WS_EX_TRANSPARENT) continue;
+        RECT r;
+        if (!GetWindowRect(w, &r) || !PtInRect(&r, pt) || IsCloaked(w)) continue;
+        return w;
+    }
+    return nullptr;
+}
+
+void PeekPoll()
+{
+    POINT pt;
+    if (!GetCursorPos(&pt)) return;
+    bool button = GetAsyncKeyState(VK_LBUTTON) < 0 || GetAsyncKeyState(VK_RBUTTON) < 0;
+    HWND top = nullptr;
+    bool haveTop = false;
+    for (auto& kv : g_win) {
+        Tracked& t = kv.second;
+        if (!t.rolled || t.suspended || t.rollPending || t.inMoveSize || IsIconic(t.hwnd)) {
+            if (!t.peeking) t.peekCount = 0;
+            if (!t.peeking || !t.rolled) continue;
+        }
+        bool enabled = t.peekRule >= 0 ? t.peekRule == 1 : g_cfg.peek;
+        if (!enabled && !t.peeking) continue;
+        HWND h = t.hwnd;
+        RECT wr;
+        if (!GetWindowRect(h, &wr)) continue;
+        if (!haveTop) {
+            top = TopWindowAt(pt);
+            haveTop = true;
+        }
+        bool over = PtInRect(&wr, pt) && (top == h || top == t.bar);
+        if (!t.peeking) {
+            if (over && !button) {
+                if (++t.peekCount >= 2) { // rested there for a moment: open
+                    t.peeking = true;
+                    t.peekCount = 0;
+                    SetWindowPos(h, nullptr, 0, 0, wr.right - wr.left, t.oldHeight,
+                                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+                    Burst();
+                }
+            } else {
+                t.peekCount = 0;
+            }
+            continue;
+        }
+        // Open. Stay open over the window itself and over anything else the
+        // same program shows (menus, dialogs).
+        bool same = over;
+        if (!same && top) {
+            DWORD a = 0, b = 0;
+            GetWindowThreadProcessId(top, &a);
+            GetWindowThreadProcessId(h, &b);
+            same = a == b || top == t.bar;
+        }
+        if (same || button || t.inMoveSize) {
+            t.peekCount = 0;
+            continue;
+        }
+        if (++t.peekCount < 2) continue;
+        t.peekCount = 0;
+        if ((IsZoomed(h) != 0) != t.zoomedAtRoll || !enabled) { // changed meanwhile: leave it open
+            ClearRolled(t);
+            continue;
+        }
+        int height = wr.bottom - wr.top;
+        if (height > t.rolledHeight + 2) { // remember a new size chosen while open
+            t.oldHeight = height;
+            SetPropW(h, FBX_PROP_OLDHEIGHT, (HANDLE)(INT_PTR)height);
+        }
+        t.peeking = false;
+        t.rollPending = true;
+        t.rollTick = GetTickCount();
+        SetWindowPos(h, nullptr, 0, 0, wr.right - wr.left, t.rolledHeight,
+                     SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING | SWP_ASYNCWINDOWPOS);
+        Burst();
+    }
+}
+
+} // namespace
+
 void TrackerOnTimer(UINT_PTR id)
 {
     if (id == FBX_TIMER_BURST) {
@@ -974,6 +1115,7 @@ void TrackerOnTimer(UINT_PTR id)
         if (kv.second.dead) dead.push_back(kv.first);
     }
     for (HWND h : dead) Untrack(h);
+    if (id == FBX_TIMER_SLOW) PeekPoll();
 
     if (id == FBX_TIMER_SLOW && ++g_slowTicks % 5 == 0) {
         // Safety net for windows whose events we missed.

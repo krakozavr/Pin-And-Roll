@@ -8,12 +8,13 @@
 
 static HWND g_dlg;
 static Config g_backup;
+static std::wstring g_selectExe;
 static bool g_loading = true; // controls notify before WM_INITDIALOG: ignore until filled in
 
 static const int kRuleControls[] = { IDC_REMOVE, IDC_IGNORE, IDC_NOPIN, IDC_NOROLL, IDC_POSLABEL, IDC_RIGHT, IDC_LEFT,
                                      IDC_OFFLABEL, IDC_OFFSET, IDC_OFFSPIN, IDC_OFFLABEL2, IDC_RHLABEL, IDC_ROLLHEIGHT,
                                      IDC_RHLABEL2, IDC_DOWNLABEL, IDC_DOWN, IDC_DOWNSPIN, IDC_DOWNLABEL2,
-                                     IDC_APPSIZELABEL, IDC_APPSIZE, IDC_APPSIZELABEL2 };
+                                     IDC_APPSIZELABEL, IDC_APPSIZE, IDC_APPSIZELABEL2, IDC_APPPEEK };
 
 // Hot key control <-> our Hotkey (the control cannot take the Win key).
 static Hotkey GetKey(HWND d, int id)
@@ -70,6 +71,7 @@ static void LoadRule(HWND d)
     SetDlgItemInt(d, IDC_OFFSET, (UINT)r->offset, TRUE);
     SetDlgItemInt(d, IDC_ROLLHEIGHT, (UINT)r->rollHeight, FALSE);
     SetDlgItemInt(d, IDC_DOWN, (UINT)r->down, TRUE);
+    CheckDlgButton(d, IDC_APPPEEK, r->peek == 1 ? BST_CHECKED : r->peek == 0 ? BST_UNCHECKED : BST_INDETERMINATE);
     SetDlgItemInt(d, IDC_APPSIZE, (UINT)r->size, FALSE);
     g_loading = false;
 }
@@ -96,6 +98,8 @@ static void Apply(HWND d)
     int size = (int)GetDlgItemInt(d, IDC_BTNSIZE, nullptr, FALSE);
     if (size >= 40 && size <= 300) g_cfg.size = size; // ignore half-typed values
     g_cfg.runAsAdmin = Checked(d, IDC_ADMIN);
+    g_cfg.peek = Checked(d, IDC_PEEK);
+    EnableWindow(GetDlgItem(d, IDC_PEEK), g_cfg.roll);
     Hotkey pk = GetKey(d, IDC_PINKEY), rk = GetKey(d, IDC_ROLLKEY);
     if (pk.vk != g_cfg.pinKey.vk || pk.mod != g_cfg.pinKey.mod || rk.vk != g_cfg.rollKey.vk ||
         rk.mod != g_cfg.rollKey.mod) {
@@ -112,6 +116,8 @@ static void Apply(HWND d)
         r->offset = (int)GetDlgItemInt(d, IDC_OFFSET, nullptr, TRUE);
         r->rollHeight = (int)GetDlgItemInt(d, IDC_ROLLHEIGHT, nullptr, FALSE);
         r->down = (int)GetDlgItemInt(d, IDC_DOWN, nullptr, TRUE);
+        UINT pk = IsDlgButtonChecked(d, IDC_APPPEEK);
+        r->peek = pk == BST_CHECKED ? 1 : pk == BST_UNCHECKED ? 0 : -1;
         int rs = (int)GetDlgItemInt(d, IDC_APPSIZE, nullptr, FALSE);
         r->size = (rs >= 40 && rs <= 300) ? rs : 0;
     }
@@ -163,6 +169,8 @@ static INT_PTR CALLBACK SettingsProc(HWND d, UINT msg, WPARAM wp, LPARAM)
         SendDlgItemMessageW(d, IDC_DOWNSPIN, UDM_SETRANGE32, (WPARAM)-200, 200);
         SetDlgItemInt(d, IDC_BTNSIZE, (UINT)g_cfg.size, FALSE);
         Check(d, IDC_ADMIN, g_cfg.runAsAdmin);
+        Check(d, IDC_PEEK, g_cfg.peek);
+        EnableWindow(GetDlgItem(d, IDC_PEEK), g_cfg.roll);
         SetKey(d, IDC_PINKEY, g_cfg.pinKey);
         SetKey(d, IDC_ROLLKEY, g_cfg.rollKey);
         HWND lb = GetDlgItem(d, IDC_APPS);
@@ -170,6 +178,14 @@ static INT_PTR CALLBACK SettingsProc(HWND d, UINT msg, WPARAM wp, LPARAM)
         if (!g_cfg.exceptions.empty()) SendMessageW(lb, LB_SETCURSEL, 0, 0);
         g_loading = false;
         LoadRule(d);
+        if (!g_selectExe.empty()) { // opened from a button's right-click menu
+            if (!g_cfg.Find(g_selectExe)) {
+                ExceptionRule r;
+                r.exe = g_selectExe;
+                g_cfg.exceptions.push_back(r);
+            }
+            SelectApp(d, g_selectExe);
+        }
         SetForegroundWindow(d);
         return TRUE;
     }
@@ -236,6 +252,8 @@ static INT_PTR CALLBACK SettingsProc(HWND d, UINT msg, WPARAM wp, LPARAM)
             }
             return TRUE;
         case IDC_ADMIN:
+        case IDC_PEEK:
+        case IDC_APPPEEK:
         case IDC_PINBTN:
         case IDC_ROLLBTN:
         case IDC_ROLLTOP:
@@ -265,12 +283,21 @@ static INT_PTR CALLBACK SettingsProc(HWND d, UINT msg, WPARAM wp, LPARAM)
     return FALSE;
 }
 
-void ShowSettings(HINSTANCE inst)
+void ShowSettings(HINSTANCE inst, const std::wstring& selectExe)
 {
     if (g_dlg) {
+        if (!selectExe.empty()) {
+            if (!g_cfg.Find(selectExe)) {
+                ExceptionRule r;
+                r.exe = selectExe;
+                g_cfg.exceptions.push_back(r);
+            }
+            SelectApp(g_dlg, selectExe);
+        }
         SetForegroundWindow(g_dlg);
         return;
     }
+    g_selectExe = selectExe;
     INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_UPDOWN_CLASS | ICC_STANDARD_CLASSES | ICC_HOTKEY_CLASS };
     InitCommonControlsEx(&icc);
     g_loading = true;

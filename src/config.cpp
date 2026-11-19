@@ -5,6 +5,8 @@
 #include <cwctype>
 #include <cstdlib>
 #include <shellapi.h>
+#include <taskschd.h>
+#include <oleauto.h>
 
 static const wchar_t* kDefaultIni =
     L"; FBX Pin & Roll-up settings. Use \"Reload settings\" in the tray menu after editing.\r\n"
@@ -23,6 +25,8 @@ static const wchar_t* kDefaultIni =
     L"ButtonSize=100\r\n"
     L"; Restart with administrator rights (buttons also on elevated programs)\r\n"
     L"RunAsAdmin=0\r\n"
+    L"; Show a rolled-up window in full while the mouse is over it\r\n"
+    L"Peek=0\r\n"
     L"; Optional hot keys acting on the active window, e.g. Ctrl+Alt+T. Empty = none.\r\n"
     L"PinHotkey=\r\n"
     L"RollHotkey=\r\n"
@@ -36,6 +40,7 @@ static const wchar_t* kDefaultIni =
     L";   offset:N      move the buttons left by N more pixels (negative = to the right)\r\n"
     L";   down:N        move the buttons down by N pixels (negative = up)\r\n"
     L";   size:N        button size in percent for this program\r\n"
+    L";   peek / nopeek show the rolled-up window while the mouse is over it, or never\r\n"
     L";   rollheight:N  height of the rolled-up window in pixels (at 100% scaling)\r\n"
     L"; Example:\r\n"
     L"; someapp.exe=noroll,offset:40\r\n";
@@ -143,6 +148,7 @@ void LoadConfig(Config& cfg)
     cfg.size = (int)GetPrivateProfileIntW(L"Settings", L"ButtonSize", 100, ini);
     if (cfg.size < 40 || cfg.size > 300) cfg.size = 100;
     cfg.runAsAdmin = GetPrivateProfileIntW(L"Settings", L"RunAsAdmin", 0, ini) != 0;
+    cfg.peek = GetPrivateProfileIntW(L"Settings", L"Peek", 0, ini) != 0;
 
     wchar_t buf[128];
     GetPrivateProfileStringW(L"Settings", L"PinHotkey", L"", buf, 128, ini);
@@ -171,6 +177,8 @@ void LoadConfig(Config& cfg)
             else if (tok == L"nopin") r.noPin = true;
             else if (tok == L"noroll") r.noRoll = true;
             else if (tok == L"left") r.left = true;
+            else if (tok == L"peek") r.peek = 1;
+            else if (tok == L"nopeek") r.peek = 0;
             else if (tok.rfind(L"offset:", 0) == 0) r.offset = _wtoi(tok.c_str() + 7);
             else if (tok.rfind(L"rollheight:", 0) == 0) r.rollHeight = _wtoi(tok.c_str() + 11);
             else if (tok.rfind(L"size:", 0) == 0) r.size = _wtoi(tok.c_str() + 5);
@@ -196,11 +204,23 @@ void SaveConfig(const Config& cfg)
     WritePrivateProfileStringW(L"Settings", L"MoveLeftMaximized", std::to_wstring(cfg.moveLeftMaximized).c_str(), ini);
     WritePrivateProfileStringW(L"Settings", L"ButtonSize", std::to_wstring(cfg.size).c_str(), ini);
     WritePrivateProfileStringW(L"Settings", L"RunAsAdmin", cfg.runAsAdmin ? L"1" : L"0", ini);
+    WritePrivateProfileStringW(L"Settings", L"Peek", cfg.peek ? L"1" : L"0", ini);
     WritePrivateProfileStringW(L"Settings", L"PinHotkey", HotkeyText(cfg.pinKey).c_str(), ini);
     WritePrivateProfileStringW(L"Settings", L"RollHotkey", HotkeyText(cfg.rollKey).c_str(), ini);
 
-    // The section is a list of NUL-terminated "key=value" strings.
-    std::wstring sec;
+    // Written key by key so that comment lines in the section survive.
+    // First drop the programs that are no longer listed.
+    std::vector<wchar_t> old(32768);
+    DWORD n = GetPrivateProfileSectionW(L"Exceptions", old.data(), (DWORD)old.size(), ini);
+    std::vector<std::wstring> gone;
+    for (const wchar_t* p = old.data(); n && *p; p += wcslen(p) + 1) {
+        std::wstring line = p;
+        size_t eq = line.find(L'=');
+        if (eq == std::wstring::npos || line[0] == L';') continue;
+        std::wstring key = Trim(line.substr(0, eq));
+        if (!cfg.Find(Lower(key))) gone.push_back(key);
+    }
+    for (const auto& k : gone) WritePrivateProfileStringW(L"Exceptions", k.c_str(), nullptr, ini);
     for (const auto& r : cfg.exceptions) {
         std::wstring v;
         auto add = [&v](const std::wstring& t) { v += (v.empty() ? L"" : L",") + t; };
@@ -212,11 +232,10 @@ void SaveConfig(const Config& cfg)
         if (r.rollHeight) add(L"rollheight:" + std::to_wstring(r.rollHeight));
         if (r.size) add(L"size:" + std::to_wstring(r.size));
         if (r.down) add(L"down:" + std::to_wstring(r.down));
-        sec += r.exe + L"=" + v;
-        sec.push_back(L'\0');
+        if (r.peek == 1) add(L"peek");
+        if (r.peek == 0) add(L"nopeek");
+        WritePrivateProfileStringW(L"Exceptions", r.exe.c_str(), v.c_str(), ini);
     }
-    sec.push_back(L'\0');
-    WritePrivateProfileSectionW(L"Exceptions", sec.c_str(), ini);
 }
 
 static const wchar_t* kRunKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
@@ -233,23 +252,6 @@ bool IsElevated()
     bool yes = GetTokenInformation(tok, TokenElevation, &e, sizeof(e), &cb) && e.TokenIsElevated;
     CloseHandle(tok);
     return yes;
-}
-
-// Runs a console tool without showing a window; returns its exit code or -1.
-static int RunHidden(const std::wstring& cmd)
-{
-    STARTUPINFOW si = {};
-    si.cb = sizeof(si);
-    PROCESS_INFORMATION pi;
-    std::vector<wchar_t> buf(cmd.begin(), cmd.end());
-    buf.push_back(0);
-    if (!CreateProcessW(nullptr, buf.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi))
-        return -1;
-    DWORD code = (DWORD)-1;
-    if (WaitForSingleObject(pi.hProcess, 20000) == WAIT_OBJECT_0) GetExitCodeProcess(pi.hProcess, &code);
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-    return (int)code;
 }
 
 static bool RunKeyExists()
@@ -276,9 +278,37 @@ static void SetRunKey(bool on)
     RegCloseKey(k);
 }
 
+// The Task Scheduler is used through its programming interface. (An earlier
+// build ran schtasks.exe hidden, which security software rightly distrusts.)
+static ITaskFolder* TaskRoot()
+{
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    ITaskService* svc = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_TaskScheduler, nullptr, CLSCTX_INPROC_SERVER, IID_ITaskService, (void**)&svc)))
+        return nullptr;
+    VARIANT e;
+    VariantInit(&e);
+    ITaskFolder* root = nullptr;
+    if (SUCCEEDED(svc->Connect(e, e, e, e))) {
+        BSTR path = SysAllocString(L"\\");
+        svc->GetFolder(path, &root);
+        SysFreeString(path);
+    }
+    svc->Release();
+    return root;
+}
+
 static bool TaskExists()
 {
-    return RunHidden(L"schtasks.exe /query /tn \"" + std::wstring(kTaskName) + L"\"") == 0;
+    ITaskFolder* root = TaskRoot();
+    if (!root) return false;
+    BSTR name = SysAllocString(kTaskName);
+    IRegisteredTask* task = nullptr;
+    bool yes = SUCCEEDED(root->GetTask(name, &task)) && task;
+    if (task) task->Release();
+    SysFreeString(name);
+    root->Release();
+    return yes;
 }
 
 static std::wstring XmlEscape(const std::wstring& in)
@@ -297,7 +327,7 @@ static std::wstring XmlEscape(const std::wstring& in)
 // the Windows permission prompt. Creating it needs administrator rights.
 static bool CreateLogonTask()
 {
-    wchar_t exe[MAX_PATH], dom[256] = L"", usr[256] = L"", tmp[MAX_PATH];
+    wchar_t exe[MAX_PATH], dom[256] = L"", usr[256] = L"";
     GetModuleFileNameW(nullptr, exe, MAX_PATH);
     GetEnvironmentVariableW(L"USERDOMAIN", dom, 256);
     GetEnvironmentVariableW(L"USERNAME", usr, 256);
@@ -314,27 +344,43 @@ static bool CreateLogonTask()
         L"<ExecutionTimeLimit>PT0S</ExecutionTimeLimit><Enabled>true</Enabled></Settings>\r\n"
         L"<Actions Context=\"Author\"><Exec><Command>" + XmlEscape(exe) + L"</Command></Exec></Actions>\r\n"
         L"</Task>\r\n";
-    GetTempPathW(MAX_PATH, tmp);
-    std::wstring file = std::wstring(tmp) + L"fbx-task.xml";
-    HANDLE f = CreateFileW(file.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE) return false;
-    DWORD w;
-    WriteFile(f, "\xFF\xFE", 2, &w, nullptr);
-    WriteFile(f, xml.c_str(), (DWORD)(xml.size() * sizeof(wchar_t)), &w, nullptr);
-    CloseHandle(f);
-    int rc = RunHidden(L"schtasks.exe /create /f /tn \"" + std::wstring(kTaskName) + L"\" /xml \"" + file + L"\"");
-    DeleteFileW(file.c_str());
-    return rc == 0;
+    ITaskFolder* root = TaskRoot();
+    if (!root) return false;
+    BSTR name = SysAllocString(kTaskName), text = SysAllocString(xml.c_str());
+    VARIANT e;
+    VariantInit(&e);
+    IRegisteredTask* task = nullptr;
+    HRESULT hr = root->RegisterTask(name, text, TASK_CREATE_OR_UPDATE, e, e, TASK_LOGON_INTERACTIVE_TOKEN, e, &task);
+    if (task) task->Release();
+    SysFreeString(name);
+    SysFreeString(text);
+    root->Release();
+    return SUCCEEDED(hr);
 }
 
 static void DeleteLogonTask()
 {
     if (!TaskExists()) return;
-    std::wstring args = L"/delete /f /tn \"" + std::wstring(kTaskName) + L"\"";
-    if (IsElevated())
-        RunHidden(L"schtasks.exe " + args);
-    else // removing it needs the same rights that created it: Windows will ask
-        ShellExecuteW(nullptr, L"runas", L"schtasks.exe", args.c_str(), nullptr, SW_HIDE);
+    if (IsElevated()) {
+        if (ITaskFolder* root = TaskRoot()) {
+            BSTR name = SysAllocString(kTaskName);
+            root->DeleteTask(name, 0);
+            SysFreeString(name);
+            root->Release();
+        }
+    } else {
+        // Removing it needs the rights that created it: Windows will ask.
+        wchar_t exe[MAX_PATH];
+        GetModuleFileNameW(nullptr, exe, MAX_PATH);
+        ShellExecuteW(nullptr, L"runas", exe, L"--autostart off", nullptr, SW_SHOWNORMAL);
+    }
+}
+
+void ConvertAutoStartIfNeeded()
+{
+    // Elevated, and start-up is still the plain entry: turn it into the
+    // logon task so that logging on does not bring up the permission prompt.
+    if (IsElevated() && RunKeyExists() && CreateLogonTask()) SetRunKey(false);
 }
 
 bool IsAutoStart()

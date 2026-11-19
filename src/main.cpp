@@ -14,6 +14,7 @@ static bool g_tray = true;
 static UINT g_taskbarCreated;
 static HWND g_mainWnd;
 static std::wstring g_args; // our own command line switches, for restarting
+static std::wstring g_settingsApp;
 
 static void AddTray(HWND wnd)
 {
@@ -48,6 +49,12 @@ static bool LaunchElevated()
     sei.lpParameters = args.c_str();
     sei.nShow = SW_SHOWNORMAL;
     return ShellExecuteExW(&sei) != 0;
+}
+
+void AppOpenSettings(const std::wstring& exe)
+{
+    g_settingsApp = exe;
+    if (g_mainWnd) PostMessageW(g_mainWnd, WM_COMMAND, IDM_SETTINGS, 0);
 }
 
 bool AppRestartElevated()
@@ -129,9 +136,12 @@ static LRESULT CALLBACK MainProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             g_cfg.rolledTopmost = !g_cfg.rolledTopmost;
             SaveToggles(g_cfg);
             break;
-        case IDM_SETTINGS:
-            ShowSettings(g_hinst);
+        case IDM_SETTINGS: {
+            std::wstring app;
+            app.swap(g_settingsApp);
+            ShowSettings(g_hinst, app);
             break;
+        }
         case IDM_DIAG: {
             std::wstring text, file;
             TrackerDiagnostics(text);
@@ -235,7 +245,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
 
     // Elevated now, and start-up is still the plain kind: convert it so that
     // logging on does not bring up the permission prompt.
-    if (g_cfg.runAsAdmin && IsElevated() && IsAutoStart()) SetAutoStart(true, true);
+    if (g_cfg.runAsAdmin) ConvertAutoStartIfNeeded();
 
     RenderInit();
 

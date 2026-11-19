@@ -86,6 +86,10 @@ choose *Settings...* in its menu) for the settings window:
   left end of the title bar, shifted sideways and vertically, resized, and
   given its own rolled-up height.
 
+Right-click either button for *Customize <program>...*, which opens the
+settings with that program selected. *Peek* (off by default, also per program)
+shows a rolled-up window in full while the mouse rests on it.
+
 Changes apply while you make them. Everything is stored in
 `%APPDATA%\FBX\fbx.ini`.
 

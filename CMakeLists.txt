@@ -8,7 +8,7 @@ add_executable(fbx WIN32
   src/main.cpp src/tracker.cpp src/render.cpp src/config.cpp src/settings.cpp
   src/common.h src/resource.h src/fbx.rc)
 target_compile_definitions(fbx PRIVATE UNICODE _UNICODE WINVER=0x0A00 _WIN32_WINNT=0x0A00)
-target_link_libraries(fbx PRIVATE dwmapi gdiplus shell32 advapi32 user32 gdi32 comctl32)
+target_link_libraries(fbx PRIVATE dwmapi gdiplus shell32 advapi32 user32 gdi32 comctl32 taskschd ole32 oleaut32 uuid)
 
 add_executable(fbxtest tests/fbxtest.cpp)
 target_compile_definitions(fbxtest PRIVATE UNICODE _UNICODE WINVER=0x0A00 _WIN32_WINNT=0x0A00)

@@ -600,7 +600,7 @@ int wmain(int argc, wchar_t** argv)
     WaitForSingleObject(g_pi.hProcess, 10000);
 
     // --- per-program rule: buttons at the left end of the title bar
-    WritePrivateProfileStringW(L"Exceptions", L"fbxtest.exe", L"left,offset:-40", g_ini.c_str());
+    WritePrivateProfileStringW(L"Exceptions", L"fbxtest.exe", L"left,offset:-40,peek", g_ini.c_str());
     Check(StartFbx() && WaitFor([&] { return FindBar(t) != nullptr; }, 10000), "restart with a 'left' rule");
     Sleep(400);
     {
@@ -609,6 +609,29 @@ int wmain(int argc, wchar_t** argv)
         printf("left rule: frame left %ld, bar %ld-%ld\n", e.left, b.left, b.right);
         Check(b.left == e.left + D(48), "left rule: buttons sit 48 px from the left edge");
         Shot(TitleAreaLeft(t), L"left");
+    }
+
+    // --- peek (enabled for this program by the rule above)
+    SetForegroundWindow(t);
+    SetCursorPos(2, 2);
+    Sleep(300);
+    ClickRoll(t);
+    Check(WaitFor([&] { return Height(t) < D(70); }), "peek: window rolls up");
+    Sleep(900);
+    Check(Height(t) < D(70), "peek: stays rolled while the mouse is elsewhere");
+    {
+        RECT r = Rect(t);
+        SetCursorPos((r.left + r.right) / 2, r.top + D(14));
+        Check(WaitFor([&] { return Height(t) == h0; }, 4000), "peek: opens while the mouse rests on the strip");
+        Sleep(700);
+        Check(Height(t) == h0, "peek: stays open while the mouse is over the window");
+        SetCursorPos(2, 2);
+        Check(WaitFor([&] { return Height(t) < D(70); }, 4000), "peek: rolls back up when the mouse leaves");
+        Sleep(700);
+        ClickRoll(t);
+        Check(WaitFor([&] { return Height(t) == h0; }), "peek: the button still unrolls for good");
+        Sleep(900);
+        Check(Height(t) == h0, "...and it stays open afterwards");
     }
     PostMessageW(FindWindowW(kMainClass, nullptr), WM_CLOSE, 0, 0);
     WaitForSingleObject(g_pi.hProcess, 10000);

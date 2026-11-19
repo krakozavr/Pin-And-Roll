@@ -41,6 +41,7 @@ struct ExceptionRule {
     int rollHeight = 0; // rolled-up height override (at 100% scale), 0 = auto
     int size = 0;       // button size in percent, 0 = use the global size
     int down = 0;       // move buttons down by N pixels (at 100% scale); negative = up
+    int peek = -1;      // show the rolled window while hovered: 1 yes, 0 no, -1 as set globally
 };
 
 struct Hotkey {
@@ -57,6 +58,7 @@ struct Config {
     int moveLeftMaximized = 0;
     int size = 100;          // button size in percent
     bool runAsAdmin = false; // restart elevated so that elevated programs get buttons too
+    bool peek = false;       // show a rolled-up window in full while the mouse is over it
     Hotkey pinKey, rollKey;
     std::vector<ExceptionRule> exceptions;
 
@@ -71,6 +73,7 @@ void SaveConfig(const Config& cfg); // everything the settings window edits
 bool IsAutoStart();
 // asAdmin: start elevated at logon without a prompt (uses a scheduled task).
 void SetAutoStart(bool on, bool asAdmin);
+void ConvertAutoStartIfNeeded();
 bool IsElevated();
 std::wstring HotkeyText(const Hotkey& hk);
 bool SystemAppsDark();
@@ -102,11 +105,12 @@ void TrackerListApps(std::vector<std::pair<std::wstring, std::wstring>>& out);
 // main.cpp
 void AppRegisterHotkeys();
 bool AppRestartElevated(); // false if the user declined the Windows prompt
+void AppOpenSettings(const std::wstring& exe); // settings window with this program selected
 
 // Text report of how each window's title bar was measured (no window titles).
 void TrackerDiagnostics(std::wstring& out);
 
 // settings.cpp
-void ShowSettings(HINSTANCE inst);
+void ShowSettings(HINSTANCE inst, const std::wstring& selectExe);
 #define FBX_TIMER_SLOW 1
 #define FBX_TIMER_BURST 2
