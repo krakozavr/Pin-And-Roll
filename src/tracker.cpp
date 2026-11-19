@@ -50,6 +50,7 @@ struct Tracked {
     int probeFromRight = 0, probeHeight = 0, probeShift = 0;
     int probeFreeAdjacent = 0; // free title bar directly left of the system buttons, px
     DWORD probeTick = 0;
+    int probeFails = 0;
 
     ButtonType btn[2] = { BTN_NONE, BTN_NONE };
     int nBtn = 0;
@@ -230,12 +231,15 @@ void GetFrame(HWND h, const RECT& wr, Frame& f)
     f.custom = ClientToScreen(h, &c) && c.y - f.top < MulDiv(12, (int)f.dpi, 96);
 }
 
+DWORD g_probeDeadline = 0; // a whole measurement must not take longer than this
+
 bool HitTest(HWND h, int x, int y, LRESULT& code)
 {
+    if (g_probeDeadline && (int)(GetTickCount() - g_probeDeadline) > 0) return false;
     POINT p = { x, y };
     PhysicalToLogicalPointForPerMonitorDPI(h, &p);
     DWORD_PTR res = 0;
-    if (!SendMessageTimeoutW(h, WM_NCHITTEST, 0, MAKELPARAM((short)p.x, (short)p.y), SMTO_ABORTIFHUNG | SMTO_BLOCK, 40,
+    if (!SendMessageTimeoutW(h, WM_NCHITTEST, 0, MAKELPARAM((short)p.x, (short)p.y), SMTO_ABORTIFHUNG | SMTO_BLOCK, 120,
                              &res))
         return false;
     code = (LRESULT)res;
@@ -250,25 +254,11 @@ inline bool IsCaptionButton(LRESULT c)
 // Ask a self-drawn title bar where its buttons really are, and where the
 // nearest free (draggable) space to their left is. The answers are stored
 // relative to the top right corner, so they stay valid while the window moves.
-void ProbeCustomTitleBar(Tracked& t, const Frame& f, LONG style, int count)
+// Returns 0 if the program did not answer in time (busy), 1 if it has no
+// title bar buttons we can find, 2 if the measurement succeeded.
+int MeasureTitleBar(Tracked& t, const Frame& f, LONG style, int count)
 {
     HWND h = t.hwnd;
-    DWORD now = GetTickCount();
-    int width = f.wr.right - f.wr.left;
-    bool keyChanged = t.probeDpi != f.dpi || t.probeZoomed != f.zoomed || t.probeCount != count;
-    if (t.probeWidth != width) t.reprobe = true; // free space depends on the width
-    if (!keyChanged && !t.reprobe) return;
-    if (t.rolled && !t.suspended && t.probeDpi) return; // keep what we measured before rolling
-    if (now - t.probeTick < 400 && t.probeDpi) return;
-    t.probeTick = now;
-    t.probeDpi = f.dpi;
-    t.probeZoomed = f.zoomed;
-    t.probeCount = count;
-    t.probeWidth = width;
-    t.reprobe = false;
-    t.probeValid = false;
-    if (IsHungAppWindow(h)) return;
-
     UINT dpi = f.dpi;
     auto D = [dpi](int v) { return MulDiv(v, (int)dpi, 96); };
     const int y0 = f.top + D(10), step = D(6);
@@ -279,7 +269,7 @@ void ProbeCustomTitleBar(Tracked& t, const Frame& f, LONG style, int count)
     int maxL = 0, maxR = -1;
     bool sawMin = false, sawClose = false;
     for (int x = f.right - D(3); x > f.right - D(400) && x > f.wr.left; x -= step) {
-        if (!HitTest(h, x, y0, code)) return;
+        if (!HitTest(h, x, y0, code)) return 0;
         if (IsCaptionButton(code)) {
             if (rightHit < 0) rightHit = x;
             leftHit = x;
@@ -293,12 +283,12 @@ void ProbeCustomTitleBar(Tracked& t, const Frame& f, LONG style, int count)
         } else if (rightHit >= 0) {
             if (++gap >= 3) break;
         } else if (x < f.right - D(150)) {
-            return; // nothing there: not a title bar we can measure
+            return 1; // nothing there: not a title bar we can measure
         }
     }
-    if (rightHit < 0) return;
+    if (rightHit < 0) return 1;
     for (int x = leftHit - 1; x > leftHit - step; x--) { // exact left edge
-        if (!HitTest(h, x, y0, code)) return;
+        if (!HitTest(h, x, y0, code)) return 0;
         if (!IsCaptionButton(code)) break;
         leftHit = x;
     }
@@ -313,20 +303,20 @@ void ProbeCustomTitleBar(Tracked& t, const Frame& f, LONG style, int count)
 
     // 2. how tall are the buttons?
     LRESULT base;
-    if (!HitTest(h, probeX, y0, base)) return;
+    if (!HitTest(h, probeX, y0, base)) return 0;
     int bottom = y0;
     for (int y = y0 + D(3); y < f.top + D(96); y += D(3)) {
-        if (!HitTest(h, probeX, y, code)) return;
+        if (!HitTest(h, probeX, y, code)) return 0;
         if (code != base) break;
         bottom = y;
     }
     for (int y = bottom + 1; y < bottom + D(3); y++) {
-        if (!HitTest(h, probeX, y, code)) return;
+        if (!HitTest(h, probeX, y, code)) return 0;
         if (code != base) break;
         bottom = y;
     }
     int height = bottom + 1 - f.top;
-    if (height < D(16)) return;
+    if (height < D(16)) return 1;
 
     // 3. nearest free stretch of title bar left of the buttons
     const int fs = D(8), barW = count * D(32) + D(2), yc = f.top + height / 2;
@@ -337,7 +327,7 @@ void ProbeCustomTitleBar(Tracked& t, const Frame& f, LONG style, int count)
     // small drag area there that may be narrower than our two buttons)
     int adjacent = 0;
     for (int x = capL - D(2); adjacent < barW + D(8) && x > f.wr.left; x -= D(3)) {
-        if (!HitTest(h, x, yc, code)) return;
+        if (!HitTest(h, x, yc, code)) return 0;
         if (code != HTCAPTION) break;
         adjacent += D(3);
     }
@@ -345,7 +335,7 @@ void ProbeCustomTitleBar(Tracked& t, const Frame& f, LONG style, int count)
     for (int i = 0; i < D(260) / fs + need; i++) {
         int x = capL - D(3) - i * fs;
         if (x <= f.wr.left) break;
-        if (!HitTest(h, x, yc, code)) return;
+        if (!HitTest(h, x, yc, code)) return 0;
         run = code == HTCAPTION ? run + 1 : 0;
         if (run >= need) {
             shift = (i + 1 - need) * fs;
@@ -357,6 +347,42 @@ void ProbeCustomTitleBar(Tracked& t, const Frame& f, LONG style, int count)
     t.probeHeight = height;
     t.probeShift = found ? shift : 0;
     t.probeValid = true;
+    return 2;
+}
+
+void ProbeCustomTitleBar(Tracked& t, const Frame& f, LONG style, int count)
+{
+    HWND h = t.hwnd;
+    DWORD now = GetTickCount();
+    int width = f.wr.right - f.wr.left;
+    bool keyChanged = t.probeDpi != f.dpi || t.probeZoomed != f.zoomed || t.probeCount != count;
+    if (t.probeWidth != width) t.reprobe = true; // free space depends on the width
+    if (!keyChanged && !t.reprobe) return;
+    if (t.rolled && !t.suspended && t.probeDpi) return; // keep what we measured before rolling
+    if (now - t.probeTick < (t.probeFails > 4 ? 5000u : 400u) && t.probeDpi) return;
+    t.probeTick = now;
+    t.probeDpi = f.dpi;
+    t.probeZoomed = f.zoomed;
+    t.probeCount = count;
+    t.probeWidth = width;
+    t.reprobe = false;
+    if (keyChanged) t.probeValid = false; // the old numbers were for another scale or state
+
+    // A busy program may answer late. That must not throw away a good
+    // measurement (the buttons would jump): keep it and try again shortly.
+    int result = 0;
+    if (!IsHungAppWindow(h)) {
+        g_probeDeadline = GetTickCount() + 600;
+        result = MeasureTitleBar(t, f, style, count);
+        g_probeDeadline = 0;
+    }
+    if (result == 0) {
+        t.reprobe = true;
+        t.probeFails++;
+    } else {
+        t.probeFails = 0;
+        if (result == 1) t.probeValid = false;
+    }
 }
 
 void ComputeGeometry(const Tracked& t, LONG style, LONG ex, const Frame& f, int count, Geometry& g)
@@ -370,7 +396,9 @@ void ComputeGeometry(const Tracked& t, LONG style, LONG ex, const Frame& f, int 
     int capL, capR, capT, capB;
     int extraShift = 0;
     bool measured = false; // caption button rectangle is known, not guessed
-    if (f.custom && t.probeValid) {
+    // A position set by hand must never move, so it is not based on the
+    // measurement (which a busy program can fail) but on fixed values.
+    if (f.custom && t.probeValid && !t.manual) {
         capR = f.right;
         capL = f.right - t.probeFromRight;
         capT = f.top;
@@ -438,7 +466,9 @@ void ComputeGeometry(const Tracked& t, LONG style, LONG ex, const Frame& f, int 
     int invisibleBottom = wr.bottom - f.efb.bottom;
     if (invisibleBottom < 0 || invisibleBottom > D(24)) invisibleBottom = 0;
     int captionBottom;
-    if (measured)
+    if (f.custom && t.probeValid)
+        captionBottom = (f.top - wr.top) + t.probeHeight; // the real height of a self-drawn title bar
+    else if (measured)
         captionBottom = capB - wr.top;
     else if ((style & WS_CAPTION) == WS_CAPTION && !f.custom)
         captionBottom = GetSystemMetricsForDpi(SM_CYCAPTION, dpi) + GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) +
