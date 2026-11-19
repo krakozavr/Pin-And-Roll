@@ -33,6 +33,7 @@ struct Tracked {
 
     // The user is dragging the window (system move/size loop).
     bool inMoveSize = false, moveIsResize = false;
+    DWORD moveEndTick = 0;
 
     // Roll-up state. "suspended": rolled while not maximized, currently
     // maximized (Windows will bring the strip back on restore).
@@ -576,8 +577,13 @@ void UpdateBar(Tracked& t)
             int edge = MulDiv(5, (int)GetDpiForWindow(h), 96);
             // grabbed by the top or bottom edge: a real vertical resize
             t.moveIsResize = p.y >= wr.bottom - 2 * edge || p.y <= wr.top + edge;
-        } else if (!moving && t.inMoveSize && !t.moveIsResize && t.rolled && !t.suspended && !t.rollPending &&
-                   !iconic && Abs((wr.bottom - wr.top) - t.rolledHeight) > 2) {
+        }
+        // Some programs apply their minimum height only when the drag is
+        // over, a moment after the move loop has ended: allow for that.
+        if (!moving && t.inMoveSize) t.moveEndTick = GetTickCount();
+        bool justMoved = t.inMoveSize || (t.moveEndTick && GetTickCount() - t.moveEndTick < 1000);
+        if (!moving && justMoved && !t.moveIsResize && t.rolled && !t.suspended && !t.rollPending && !t.peeking &&
+            !iconic && Abs((wr.bottom - wr.top) - t.rolledHeight) > 2) {
             SetWindowPos(h, nullptr, 0, 0, wr.right - wr.left, t.rolledHeight,
                          SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING | SWP_ASYNCWINDOWPOS);
             t.rollPending = true;
