@@ -628,7 +628,7 @@ int wmain(int argc, wchar_t** argv)
     }
 
     // Check for updates (tray menu): asks GitHub for the latest release
-    PostMessageW(FindWindowW(kMainClass, nullptr), WM_COMMAND, 110, 0);
+    PostMessageW(FindWindowW(kMainClass, nullptr), WM_COMMAND, 111, 0); // IDM_UPDATE
     {
         HWND ub = nullptr;
         bool shown = WaitFor([&] { return (ub = FindWindowW(nullptr, L"Pin&Roll - Update")) != nullptr; }, 20000);
