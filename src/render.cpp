@@ -102,7 +102,7 @@ void RenderBar(HWND bar, const RECT& rc, const ButtonDraw* btns, int count, UINT
         g.SetPixelOffsetMode(PixelOffsetModeHalf);
 
         BYTE c = dark ? 255 : 0;
-        Color fg(255, dark ? 255 : 27, dark ? 255 : 27, dark ? 255 : 27);
+        Color fg(255, c, c, c); // white on a dark title bar, black on a light one
         float s = dpi / 96.0f;
         float bw = (float)w / count;
         for (int i = 0; i < count; i++) {
@@ -116,14 +116,8 @@ void RenderBar(HWND bar, const RECT& rc, const ButtonDraw* btns, int count, UINT
                 g.FillRectangle(&hb, x, 0.0f, bw, (float)h);
             }
             float ox = x + (bw - 16 * s) / 2, oy = (h - 16 * s) / 2;
-            Color halo(dark ? 150 : 170, dark ? 0 : 255, dark ? 0 : 255, dark ? 0 : 255);
-            if (btns[i].type == BTN_PIN) {
-                DrawPin(g, ox, oy, s, halo, btns[i].active, 2.0f);
-                DrawPin(g, ox, oy, s, fg, btns[i].active);
-            } else {
-                DrawRoll(g, ox, oy, s, halo, btns[i].active, 2.0f);
-                DrawRoll(g, ox, oy, s, fg, btns[i].active);
-            }
+            if (btns[i].type == BTN_PIN) DrawPin(g, ox, oy, s, fg, btns[i].active);
+            else DrawRoll(g, ox, oy, s, fg, btns[i].active);
         }
     }
     POINT dst = { rc.left, rc.top }, src = { 0, 0 };

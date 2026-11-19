@@ -168,6 +168,28 @@ static void Click(HWND bar, double fraction)
 static void ClickRoll(HWND t) { Click(FindBar(t), 0.25); } // left button
 static void ClickPin(HWND t) { Click(FindBar(t), 0.75); }  // right button
 
+// A genuine mouse click through the input system, as a person would make it.
+static void RealClick(int x, int y)
+{
+    SetCursorPos(x, y);
+    Sleep(120);
+    INPUT in[2] = {};
+    in[0].type = in[1].type = INPUT_MOUSE;
+    in[0].mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+    in[1].mi.dwFlags = MOUSEEVENTF_LEFTUP;
+    SendInput(1, &in[0], sizeof(INPUT));
+    Sleep(80);
+    SendInput(1, &in[1], sizeof(INPUT));
+    Sleep(150);
+    SetCursorPos(5, 400);
+}
+static void RealClickPin(HWND t)
+{
+    RECT b = {};
+    GetWindowRect(FindBar(t), &b);
+    RealClick(b.left + (b.right - b.left) * 3 / 4, (b.top + b.bottom) / 2);
+}
+
 static RECT Rect(HWND w) { RECT r = {}; GetWindowRect(w, &r); return r; }
 static int Height(HWND w) { RECT r = Rect(w); return r.bottom - r.top; }
 static bool Topmost(HWND w) { return (GetWindowLongW(w, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0; }
@@ -242,6 +264,14 @@ static RECT TitleArea(HWND w)
     return out;
 }
 
+static RECT TitleAreaLeft(HWND w)
+{
+    RECT r = Rect(w);
+    int s = (int)GetDpiForWindow(w);
+    RECT out = { r.left, r.top - 6, r.left + MulDiv(330, s, 96), r.top + MulDiv(46, s, 96) };
+    return out;
+}
+
 int wmain(int argc, wchar_t** argv)
 {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -313,6 +343,32 @@ int wmain(int argc, wchar_t** argv)
     Shot(TitleArea(t), L"pinned");
     ClickPin(t);
     Check(WaitFor([&] { return !Topmost(t); }), "pin: second click releases the window");
+
+    // --- real mouse input, on the active and on an inactive window
+    SetForegroundWindow(t);
+    Sleep(300);
+    RealClickPin(t);
+    bool realActive = WaitFor([&] { return Topmost(t); }, 2000);
+    Check(realActive, "real mouse click pins the active window");
+    if (realActive) {
+        RealClickPin(t);
+        Check(WaitFor([&] { return !Topmost(t); }, 2000), "real mouse click unpins it");
+    }
+    ShowWindow(g_second, SW_SHOW);
+    SetForegroundWindow(g_second);
+    Sleep(500);
+    printf("foreground is %s\n", GetForegroundWindow() == t ? "the target (could not deactivate it)" : "another window");
+    RealClickPin(t);
+    bool realInactive = WaitFor([&] { return Topmost(t); }, 2000);
+    Check(realInactive, "real mouse click pins an INACTIVE window");
+    if (!realInactive) DumpZ(t);
+    if (Topmost(t)) {
+        ClickPin(t);
+        WaitFor([&] { return !Topmost(t); });
+    }
+    ShowWindow(g_second, SW_HIDE);
+    SetForegroundWindow(t);
+    Sleep(300);
 
     // --- roll-up
     int h0 = Height(t), w0 = wr.right - wr.left;
@@ -471,6 +527,33 @@ int wmain(int argc, wchar_t** argv)
     ClickRoll(t);
     Check(WaitFor([&] { return Height(t) == h0; }), "crash recovery: one click restores the original height");
 
+    // --- settings window (opened the way the tray menu does)
+    PostMessageW(FindWindowW(kMainClass, nullptr), WM_COMMAND, 103, 0);
+    HWND dlg = nullptr;
+    Check(WaitFor([&] { return (dlg = FindWindowW(nullptr, L"FBX Pin & Roll-up - Settings")) != nullptr; }),
+          "settings window opens");
+    if (dlg) {
+        Sleep(800);
+        RECT dr = Rect(dlg);
+        Shot(dr, L"settings");
+        PostMessageW(dlg, WM_COMMAND, IDCANCEL, 0);
+        Check(WaitFor([&] { return !IsWindow(dlg); }), "settings window closes on Cancel");
+    }
+
+    PostMessageW(FindWindowW(kMainClass, nullptr), WM_CLOSE, 0, 0);
+    WaitForSingleObject(g_pi.hProcess, 10000);
+
+    // --- per-program rule: buttons at the left end of the title bar
+    WritePrivateProfileStringW(L"Exceptions", L"fbxtest.exe", L"left,offset:-40", g_ini.c_str());
+    Check(StartFbx() && WaitFor([&] { return FindBar(t) != nullptr; }, 10000), "restart with a 'left' rule");
+    Sleep(400);
+    {
+        RECT e = Rect(t), b = Rect(FindBar(t));
+        DwmGetWindowAttribute(t, DWMWA_EXTENDED_FRAME_BOUNDS, &e, sizeof(e));
+        printf("left rule: frame left %ld, bar %ld-%ld\n", e.left, b.left, b.right);
+        Check(b.left == e.left + D(48), "left rule: buttons sit 48 px from the left edge");
+        Shot(TitleAreaLeft(t), L"left");
+    }
     PostMessageW(FindWindowW(kMainClass, nullptr), WM_CLOSE, 0, 0);
     WaitForSingleObject(g_pi.hProcess, 10000);
     PostMessageW(t, WM_CLOSE, 0, 0);

@@ -6,8 +6,8 @@ mkdir -p build-mingw
 D="-DUNICODE -D_UNICODE -DWINVER=0x0A00 -D_WIN32_WINNT=0x0A00"
 x86_64-w64-mingw32-windres -I src src/fbx.rc -O coff -o build-mingw/fbx.res
 x86_64-w64-mingw32-g++ -std=c++17 -O2 -Wall -Wextra $D -municode -mwindows -static \
-  src/main.cpp src/tracker.cpp src/render.cpp src/config.cpp build-mingw/fbx.res \
-  -o build-mingw/fbx.exe -ldwmapi -lgdiplus -lshell32 -ladvapi32 -lole32 -lgdi32
+  src/main.cpp src/tracker.cpp src/render.cpp src/config.cpp src/settings.cpp build-mingw/fbx.res \
+  -o build-mingw/fbx.exe -ldwmapi -lgdiplus -lshell32 -ladvapi32 -lole32 -lgdi32 -lcomctl32
 x86_64-w64-mingw32-g++ -std=c++17 -O2 -Wall $D -municode -mconsole -static \
   tests/fbxtest.cpp -o build-mingw/fbxtest.exe -ldwmapi -lgdiplus -lole32 -lgdi32
 ls -l build-mingw/*.exe

@@ -36,7 +36,8 @@ struct ExceptionRule {
     bool ignore = false;
     bool noPin = false;
     bool noRoll = false;
-    int offset = 0;     // move buttons left by N pixels (at 100% scale)
+    bool left = false;  // put the buttons at the left end of the title bar
+    int offset = 0;     // move buttons left by N pixels (at 100% scale); negative = right
     int rollHeight = 0; // rolled-up height override (at 100% scale), 0 = auto
 };
 
@@ -62,6 +63,7 @@ struct Config {
 std::wstring DefaultConfigPath();
 void LoadConfig(Config& cfg);
 void SaveToggles(const Config& cfg);
+void SaveConfig(const Config& cfg); // everything the settings window edits
 bool IsAutoStart();
 void SetAutoStart(bool on);
 bool SystemAppsDark();
@@ -86,5 +88,10 @@ void TrackerOnTimer(UINT_PTR id);
 void TrackerRefreshAll();
 void TrackerUnrollAll();
 void TrackerToggleForeground(ButtonType which);
+// Programs that currently have windows with buttons: (exe name, a window title).
+void TrackerListApps(std::vector<std::pair<std::wstring, std::wstring>>& out);
+
+// settings.cpp
+void ShowSettings(HINSTANCE inst);
 #define FBX_TIMER_SLOW 1
 #define FBX_TIMER_BURST 2

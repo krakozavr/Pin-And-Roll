@@ -1,0 +1,25 @@
+// Resource identifiers. License: GPL-3.0-or-later.
+#define IDD_SETTINGS 100
+#define IDC_PINBTN 1001
+#define IDC_ROLLBTN 1002
+#define IDC_ROLLTOP 1003
+#define IDC_MOVELEFT 1004
+#define IDC_MOVELEFTMAX 1005
+#define IDC_AUTOSTART 1006
+#define IDC_APPS 1010
+#define IDC_PICK 1011
+#define IDC_REMOVE 1012
+#define IDC_IGNORE 1013
+#define IDC_NOPIN 1014
+#define IDC_NOROLL 1015
+#define IDC_POSLABEL 1016
+#define IDC_RIGHT 1017
+#define IDC_LEFT 1018
+#define IDC_OFFLABEL 1019
+#define IDC_OFFSET 1020
+#define IDC_OFFSPIN 1021
+#define IDC_OFFLABEL2 1022
+#define IDC_RHLABEL 1023
+#define IDC_ROLLHEIGHT 1024
+#define IDC_RHLABEL2 1025
+#define IDC_HINT 1026

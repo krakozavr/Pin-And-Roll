@@ -27,7 +27,8 @@ static const wchar_t* kDefaultIni =
     L";   ignore        do not handle this program at all\r\n"
     L";   nopin         no push-pin button\r\n"
     L";   noroll        no roll-up button\r\n"
-    L";   offset:N      move the buttons left by N more pixels (N may be negative)\r\n"
+    L";   left          put the buttons at the left end of the title bar\r\n"
+    L";   offset:N      move the buttons left by N more pixels (negative = to the right)\r\n"
     L";   rollheight:N  height of the rolled-up window in pixels (at 100% scaling)\r\n"
     L"; Example:\r\n"
     L"; someapp.exe=noroll,offset:40\r\n";
@@ -140,6 +141,7 @@ void LoadConfig(Config& cfg)
             if (tok == L"ignore") r.ignore = true;
             else if (tok == L"nopin") r.noPin = true;
             else if (tok == L"noroll") r.noRoll = true;
+            else if (tok == L"left") r.left = true;
             else if (tok.rfind(L"offset:", 0) == 0) r.offset = _wtoi(tok.c_str() + 7);
             else if (tok.rfind(L"rollheight:", 0) == 0) r.rollHeight = _wtoi(tok.c_str() + 11);
         }
@@ -153,6 +155,31 @@ void SaveToggles(const Config& cfg)
     WritePrivateProfileStringW(L"Settings", L"PinButton", cfg.pin ? L"1" : L"0", ini);
     WritePrivateProfileStringW(L"Settings", L"RollButton", cfg.roll ? L"1" : L"0", ini);
     WritePrivateProfileStringW(L"Settings", L"RolledTopmost", cfg.rolledTopmost ? L"1" : L"0", ini);
+}
+
+void SaveConfig(const Config& cfg)
+{
+    const wchar_t* ini = cfg.path.c_str();
+    SaveToggles(cfg);
+    WritePrivateProfileStringW(L"Settings", L"MoveLeft", std::to_wstring(cfg.moveLeft).c_str(), ini);
+    WritePrivateProfileStringW(L"Settings", L"MoveLeftMaximized", std::to_wstring(cfg.moveLeftMaximized).c_str(), ini);
+
+    // The section is a list of NUL-terminated "key=value" strings.
+    std::wstring sec;
+    for (const auto& r : cfg.exceptions) {
+        std::wstring v;
+        auto add = [&v](const std::wstring& t) { v += (v.empty() ? L"" : L",") + t; };
+        if (r.ignore) add(L"ignore");
+        if (r.noPin) add(L"nopin");
+        if (r.noRoll) add(L"noroll");
+        if (r.left) add(L"left");
+        if (r.offset) add(L"offset:" + std::to_wstring(r.offset));
+        if (r.rollHeight) add(L"rollheight:" + std::to_wstring(r.rollHeight));
+        sec += r.exe + L"=" + v;
+        sec.push_back(L'\0');
+    }
+    sec.push_back(L'\0');
+    WritePrivateProfileSectionW(L"Exceptions", sec.c_str(), ini);
 }
 
 static const wchar_t* kRunKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";

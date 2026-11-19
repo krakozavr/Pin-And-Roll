@@ -22,6 +22,7 @@ struct Tracked {
     HWND bar = nullptr;
     std::wstring exe;
     bool noPin = false, noRoll = false;
+    bool left = false, manual = false; // manual: position set by the user, no automatic search
     int offset = 0, rollHeight = 0;
 
     // Roll-up state. "suspended": rolled while not maximized, currently
@@ -154,13 +155,15 @@ void ApplyException(Tracked& t)
     const ExceptionRule* r = g_cfg.Find(t.exe);
     t.noPin = r && r->noPin;
     t.noRoll = r && r->noRoll;
+    t.left = r && r->left;
+    t.manual = r && (r->left || r->offset != 0);
     t.offset = r ? r->offset : 0;
     t.rollHeight = r ? r->rollHeight : 0;
 }
 
 struct Frame {
     RECT wr, efb;
-    int top, right; // visible top / right edge (on screen when maximized)
+    int top, right, left; // visible edges (on screen when maximized)
     bool zoomed, custom;
     UINT dpi;
 };
@@ -179,12 +182,14 @@ void GetFrame(HWND h, const RECT& wr, Frame& f)
     f.zoomed = IsZoomed(h) != 0;
     f.top = f.efb.top;
     f.right = f.efb.right;
+    f.left = f.efb.left;
     if (f.zoomed) {
         MONITORINFO mi = {};
         mi.cbSize = sizeof(mi);
         if (GetMonitorInfoW(MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST), &mi)) {
             if (f.top < mi.rcMonitor.top) f.top = mi.rcMonitor.top;
             if (f.right > mi.rcMonitor.right) f.right = mi.rcMonitor.right;
+            if (f.left < mi.rcMonitor.left) f.left = mi.rcMonitor.left;
         }
     }
     // Does the client area reach the top edge? Then the program draws its
@@ -329,7 +334,7 @@ void ComputeGeometry(const Tracked& t, LONG style, LONG ex, const Frame& f, int 
         capL = f.right - t.probeFromRight;
         capT = f.top;
         capB = capT + t.probeHeight;
-        extraShift = t.probeShift;
+        extraShift = t.manual ? 0 : t.probeShift;
         measured = true;
     } else {
         // Where are the minimize / maximize / close buttons? Ask the compositor.
@@ -365,7 +370,12 @@ void ComputeGeometry(const Tracked& t, LONG style, LONG ex, const Frame& f, int 
     int top = capT + (capH - bh) / 2;
     int shift = D(2) + extraShift + D(g_cfg.moveLeft) + (f.zoomed ? D(g_cfg.moveLeftMaximized) : 0) + D(t.offset);
     bool mirrored = (capL + capR) / 2 < (wr.left + wr.right) / 2; // right-to-left windows
-    if (!mirrored) {
+    if (t.left) {
+        // Chosen by the user: left end of the title bar. A negative offset
+        // moves the buttons to the right, clear of an icon or menu.
+        g.bar.left = f.left + D(8) - D(t.offset);
+        g.bar.right = g.bar.left + count * bw;
+    } else if (!mirrored) {
         g.bar.right = capL - shift;
         g.bar.left = g.bar.right - count * bw;
     } else {
@@ -781,10 +791,8 @@ LRESULT CALLBACK BarProc(HWND bar, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_MOUSELEAVE:
         if (Tracked* t = FromBar(bar)) {
-            if (GetCapture() != bar) {
-                t->hot = -1;
-                UpdateBar(*t);
-            }
+            t->hot = -1;
+            UpdateBar(*t);
         }
         return 0;
     case WM_LBUTTONDOWN:
@@ -803,14 +811,6 @@ LRESULT CALLBACK BarProc(HWND bar, UINT msg, WPARAM wp, LPARAM lp)
             if (GetCapture() == bar) ReleaseCapture();
             if (i >= 0 && i == pressed) DoButton(*t, t->btn[i]);
             UpdateBar(*t);
-        }
-        return 0;
-    case WM_CAPTURECHANGED:
-        if (Tracked* t = FromBar(bar)) {
-            if (t->pressed != -1) {
-                t->pressed = -1;
-                UpdateBar(*t);
-            }
         }
         return 0;
     case WM_NCDESTROY:
@@ -928,6 +928,21 @@ void TrackerOnTimer(UINT_PTR id)
             for (auto it = g_rejected.begin(); it != g_rejected.end();)
                 it = IsWindow(it->first) ? ++it : g_rejected.erase(it);
         }
+    }
+}
+
+void TrackerListApps(std::vector<std::pair<std::wstring, std::wstring>>& out)
+{
+    for (auto& kv : g_win) {
+        const Tracked& t = kv.second;
+        if (t.exe.empty() || !IsWindowVisible(t.hwnd)) continue;
+        bool seen = false;
+        for (auto& o : out)
+            if (o.first == t.exe) seen = true;
+        if (seen) continue;
+        wchar_t title[80] = L"";
+        GetWindowTextW(t.hwnd, title, 80);
+        out.push_back({ t.exe, title });
     }
 }
 

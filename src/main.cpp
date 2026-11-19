@@ -5,7 +5,7 @@
 
 #define FBX_VERSION L"3.0.0-preview"
 #define WM_TRAY (WM_APP + 1)
-enum { IDM_PIN = 100, IDM_ROLL, IDM_ROLLTOP, IDM_AUTOSTART, IDM_EDIT, IDM_RELOAD, IDM_ABOUT, IDM_EXIT };
+enum { IDM_PIN = 100, IDM_ROLL, IDM_ROLLTOP, IDM_SETTINGS, IDM_EDIT, IDM_RELOAD, IDM_ABOUT, IDM_EXIT };
 enum { HK_PIN = 1, HK_ROLL = 2 };
 
 static HINSTANCE g_hinst;
@@ -44,9 +44,10 @@ static void ShowMenu(HWND wnd)
     AppendMenuW(m, chk(g_cfg.rolledTopmost) | (g_cfg.roll ? 0 : MF_GRAYED), IDM_ROLLTOP,
                 L"When rolled up, keep the window bar on top");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(m, chk(IsAutoStart()), IDM_AUTOSTART, L"Start with Windows");
-    AppendMenuW(m, MF_STRING, IDM_EDIT, L"Edit settings and exceptions...");
-    AppendMenuW(m, MF_STRING, IDM_RELOAD, L"Reload settings");
+    AppendMenuW(m, MF_STRING, IDM_SETTINGS, L"Settings...");
+    SetMenuDefaultItem(m, IDM_SETTINGS, FALSE);
+    AppendMenuW(m, MF_STRING, IDM_EDIT, L"Open settings file (hot keys)");
+    AppendMenuW(m, MF_STRING, IDM_RELOAD, L"Reload settings file");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, IDM_ABOUT, L"About");
     AppendMenuW(m, MF_STRING, IDM_EXIT, L"Exit");
@@ -72,7 +73,8 @@ static LRESULT CALLBACK MainProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         TrackerToggleForeground(wp == HK_PIN ? BTN_PIN : BTN_ROLL);
         return 0;
     case WM_TRAY:
-        if (LOWORD(lp) == WM_RBUTTONUP || LOWORD(lp) == WM_LBUTTONUP || LOWORD(lp) == WM_CONTEXTMENU) ShowMenu(wnd);
+        if (LOWORD(lp) == WM_LBUTTONDBLCLK) PostMessageW(wnd, WM_COMMAND, IDM_SETTINGS, 0);
+        else if (LOWORD(lp) == WM_RBUTTONUP || LOWORD(lp) == WM_LBUTTONUP || LOWORD(lp) == WM_CONTEXTMENU) ShowMenu(wnd);
         return 0;
     case WM_SETTINGCHANGE:
     case WM_DISPLAYCHANGE:
@@ -96,8 +98,8 @@ static LRESULT CALLBACK MainProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             g_cfg.rolledTopmost = !g_cfg.rolledTopmost;
             SaveToggles(g_cfg);
             break;
-        case IDM_AUTOSTART:
-            SetAutoStart(!IsAutoStart());
+        case IDM_SETTINGS:
+            ShowSettings(g_hinst);
             break;
         case IDM_EDIT:
             ShellExecuteW(wnd, L"open", L"notepad.exe", (L"\"" + g_cfg.path + L"\"").c_str(), nullptr, SW_SHOWNORMAL);
