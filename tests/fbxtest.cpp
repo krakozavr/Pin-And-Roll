@@ -434,10 +434,13 @@ int wmain(int argc, wchar_t** argv)
         SendInput(1, &in, sizeof(in));
         Sleep(150);
         int during = 0;
-        for (int i = 0; i < 12; i++) {
-            in.mi.dwFlags = MOUSEEVENTF_MOVE;
-            in.mi.dx = 6;
-            in.mi.dy = 4;
+        int cx = GetSystemMetrics(SM_CXSCREEN), cy = GetSystemMetrics(SM_CYSCREEN);
+        for (int i = 1; i <= 12; i++) {
+            // absolute pointer positions, as a tablet or remote session sends them
+            int x = s0.left + D(120) + i * 6, y = s0.top + D(15) + i * 4;
+            in.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
+            in.mi.dx = x * 65535 / (cx - 1);
+            in.mi.dy = y * 65535 / (cy - 1);
             SendInput(1, &in, sizeof(in));
             Sleep(40);
             if (Height(g_second) > during) during = Height(g_second);
@@ -447,7 +450,9 @@ int wmain(int argc, wchar_t** argv)
         in.mi.dwFlags = MOUSEEVENTF_LEFTUP;
         SendInput(1, &in, sizeof(in));
         RECT s1 = Rect(g_second);
-        printf("drag: moved by %ld,%ld; tallest during drag %d px; rolled height %d\n", s1.left - s0.left,
+        Sleep(200);
+        s1 = Rect(g_second);
+        printf("drag: moved by %ld,%ld; tallest during drag %d px; rolled height %ld\n", s1.left - s0.left,
                s1.top - s0.top, during, s0.bottom - s0.top);
         Check(s1.left - s0.left > D(15), "rolled window was dragged with the mouse");
         Check(WaitFor([&] { return Height(g_second) < D(70); }, 4000), "after the drag it is a rolled-up strip again");

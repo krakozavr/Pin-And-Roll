@@ -28,6 +28,7 @@ jobs:
           cmd /c ver
           build\Release\fbxtest.exe build\Release\fbx.exe --shot shots\${{ matrix.os }}
       - name: Start-up entry (scheduled task when "run as administrator" is set)
+        if: always()
         run: |
           Set-Content -Path at.ini -Value "[Settings]`r`nRunAsAdmin=1"
           Start-Process -Wait build\Release\fbx.exe -ArgumentList '--config', "$PWD\at.ini", '--autostart', 'on'
