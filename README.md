@@ -61,7 +61,9 @@ right or at the left end of the title bar, shift them sideways and
 vertically, resize them, and set the rolled-up height.
 
 Changes apply while you make them. Everything is stored in
-`%APPDATA%\PinRoll\pinroll.ini`, which can also be edited by hand.
+`%APPDATA%\PinRoll\pinroll.ini`. *Open .ini file* in the settings window
+opens it; hand edits and your own comment lines are kept, and changes are
+picked up when you save the file.
 
 ### How it behaves
 
@@ -132,6 +134,8 @@ Because it works from outside, it treats 32-bit, 64-bit and ARM64 programs
 alike.
 
 ## Background, credits and licence
+
+Developed by Alex Potemkin, ShotPorter. See [more from this developer](MORE.md).
 
 Pin&Roll started as a refresh of two functions of **FileBox eXtender** v2.01,
 (C) 1999-2011 Greg Kochaniak, Hyperionics Technology LLC, released under the

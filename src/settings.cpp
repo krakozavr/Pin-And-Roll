@@ -4,6 +4,7 @@
 #include "common.h"
 #include "resource.h"
 #include <commctrl.h>
+#include <shellapi.h>
 #include <cwctype>
 
 static HWND g_dlg;
@@ -230,6 +231,14 @@ static INT_PTR CALLBACK SettingsProc(HWND d, UINT msg, WPARAM wp, LPARAM)
         case IDC_HELPBTN:
             AppShowHelp();
             return TRUE;
+        case IDC_OPENINI: {
+            // Save what is on screen and close first, so that this window
+            // cannot overwrite what is then typed into the file.
+            std::wstring path = g_cfg.path;
+            SendMessageW(d, WM_COMMAND, IDOK, 0);
+            ShellExecuteW(nullptr, L"open", L"notepad.exe", (L"\"" + path + L"\"").c_str(), nullptr, SW_SHOWNORMAL);
+            return TRUE;
+        }
         case IDC_REMOVE:
             if (ExceptionRule* r = SelectedRule(d)) {
                 HWND lb = GetDlgItem(d, IDC_APPS);
@@ -284,6 +293,11 @@ static INT_PTR CALLBACK SettingsProc(HWND d, UINT msg, WPARAM wp, LPARAM)
         break;
     }
     return FALSE;
+}
+
+bool SettingsIsOpen()
+{
+    return g_dlg != nullptr;
 }
 
 void ShowSettings(HINSTANCE inst, const std::wstring& selectExe)

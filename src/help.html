@@ -23,6 +23,7 @@
   .glyph { display:inline-block; vertical-align:-4px; }
   .glyph svg { width:20px; height:20px; stroke:var(--fg); fill:none; stroke-width:1.3; stroke-linecap:round; stroke-linejoin:round; }
   .note { background:var(--card); border-radius:6px; padding:10px 14px; margin:12px 0; }
+  a { color:var(--accent); }
   code { background:var(--card); padding:1px 5px; border-radius:4px; font-size:13.5px; }
   table { border-collapse:collapse; width:100%; margin:10px 0; }
   th, td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
@@ -55,7 +56,7 @@
 <p>Pin&amp;Roll has no main window. It sits as a blue pin icon near the clock (possibly under the <b>^</b> arrow).</p>
 <ul>
 <li><b>Double-click</b> the icon to open the settings.</li>
-<li><b>Click</b> it for the menu: the three main switches, <i>Settings...</i>, <i>Help</i>, <i>Open settings file</i>, <i>Reload settings file</i>, <i>Save diagnostics...</i>, <i>About</i> and <i>Exit</i>.</li>
+<li><b>Click</b> it for the menu: the three main switches, <i>Settings...</i>, <i>Save diagnostics...</i>, <i>Help</i>, <i>About</i>, <i>More from this developer</i> and <i>Exit</i>.</li>
 </ul>
 
 <h2>Settings</h2>
@@ -119,12 +120,20 @@
 <ul>
 <li>Full-screen windows get no buttons.</li>
 <li>If Pin&amp;Roll is closed unexpectedly, rolled-up windows stay rolled. Start Pin&amp;Roll again and one click on the roll-up button restores them.</li>
-<li>Settings are stored in <code>%APPDATA%\PinRoll\pinroll.ini</code>. You can edit the file by hand and choose <i>Reload settings file</i>.</li>
+<li>Settings are stored in <code>%APPDATA%\PinRoll\pinroll.ini</code>. <b>Open .ini file</b> in the settings window opens it in Notepad. You can edit it by hand and add your own comment lines (starting with a semicolon); changes are picked up a couple of seconds after you save.</li>
 <li><i>Save diagnostics...</i> writes a short text report about how each window's title bar was measured. It contains program names and positions, no window titles. It is useful when reporting a placement problem.</li>
 <li>Pin&amp;Roll changes nothing inside other programs: it only draws its two buttons on top of their title bars.</li>
 </ul>
 
+<h2>More from this developer</h2>
+<div class="note">
+<p><b>Are you a photographer, videographer or content creator?</b><br>
+Try ShotPorter, the most flexible ingest application for Mac. Sort and store your shoots like a boss.
+<a href="https://www.shotporter.com">www.shotporter.com</a></p>
+</div>
+
 <h2>About</h2>
+<p>Developed by Alex Potemkin, ShotPorter.</p>
 <p>A Windows 10 / 11 rewrite of the push-pin and roll-up buttons of FileBox eXtender, &copy; 1999-2011 Greg Kochaniak, Hyperionics Technology LLC. Free software under the GNU General Public License v3 or later.</p>
 </main>
 </body>

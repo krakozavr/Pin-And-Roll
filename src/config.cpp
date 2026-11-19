@@ -9,7 +9,8 @@
 #include <oleauto.h>
 
 static const wchar_t* kDefaultIni =
-    L"; Pin&Roll settings. Use \"Reload settings\" in the tray menu after editing.\r\n"
+    L"; This is the Pin&Roll settings file. Changes are picked up when you save it.\r\n"
+    L"; You may leave your own comments here: lines that start with a semicolon are kept.\r\n"
     L"[Settings]\r\n"
     L"; Push-pin button to keep windows on top\r\n"
     L"PinButton=1\r\n"

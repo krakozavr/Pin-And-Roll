@@ -114,5 +114,6 @@ void TrackerDiagnostics(std::wstring& out);
 
 // settings.cpp
 void ShowSettings(HINSTANCE inst, const std::wstring& selectExe);
+bool SettingsIsOpen();
 #define PR_TIMER_SLOW 1
 #define PR_TIMER_BURST 2

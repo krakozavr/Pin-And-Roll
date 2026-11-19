@@ -3,10 +3,11 @@
 #include "common.h"
 #include <shellapi.h>
 #include "resource.h"
+#include <commctrl.h>
 
 #define PR_VERSION L"1.0.0"
 #define WM_TRAY (WM_APP + 1)
-enum { IDM_PIN = 100, IDM_ROLL, IDM_ROLLTOP, IDM_SETTINGS, IDM_EDIT, IDM_RELOAD, IDM_ABOUT, IDM_EXIT, IDM_DIAG, IDM_HELP };
+enum { IDM_PIN = 100, IDM_ROLL, IDM_ROLLTOP, IDM_SETTINGS, IDM_EDIT, IDM_RELOAD, IDM_ABOUT, IDM_EXIT, IDM_DIAG, IDM_HELP, IDM_MORE };
 enum { HK_PIN = 1, HK_ROLL = 2 };
 
 static HINSTANCE g_hinst;
@@ -29,6 +30,43 @@ static void AddTray(HWND wnd)
     g_nid.hIcon = CreateAppIcon(GetSystemMetrics(SM_CXSMICON));
     lstrcpynW(g_nid.szTip, L"Pin&Roll", 64);
     Shell_NotifyIconW(NIM_ADD, &g_nid);
+}
+
+#define PR_MORE_URL L"https://github.com/krakozavr/Pin-And-Roll/blob/HEAD/MORE.md"
+static FILETIME g_iniStamp;
+static int g_iniTicks;
+
+static FILETIME IniStamp()
+{
+    WIN32_FILE_ATTRIBUTE_DATA d = {};
+    GetFileAttributesExW(g_cfg.path.c_str(), GetFileExInfoStandard, &d);
+    return d.ftLastWriteTime;
+}
+
+static INT_PTR CALLBACK AboutProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
+{
+    switch (msg) {
+    case WM_INITDIALOG:
+        SetDlgItemTextW(d, IDC_ABOUTTITLE, L"Pin&Roll " PR_VERSION);
+        SetDlgItemTextW(d, IDC_ABOUTLINKS,
+                        L"Developer: Alex Potemkin, ShotPorter\n"
+                        L"Photographer, videographer, content creator? Try ShotPorter (Mac only): "
+                        L"<a href=\"https://www.shotporter.com\">www.shotporter.com</a>\n"
+                        L"Source and new versions: "
+                        L"<a href=\"https://github.com/krakozavr/Pin-And-Roll\">github.com/krakozavr/Pin-And-Roll</a>");
+        SetForegroundWindow(d);
+        return TRUE;
+    case WM_NOTIFY: {
+        NMHDR* h = (NMHDR*)lp;
+        if (h->idFrom == IDC_ABOUTLINKS && (h->code == NM_CLICK || h->code == NM_RETURN))
+            ShellExecuteW(nullptr, L"open", ((NMLINK*)lp)->item.szUrl, nullptr, nullptr, SW_SHOWNORMAL);
+        return TRUE;
+    }
+    case WM_COMMAND:
+        if (LOWORD(wp) == IDOK || LOWORD(wp) == IDCANCEL) EndDialog(d, 0);
+        return TRUE;
+    }
+    return FALSE;
 }
 
 static void RegisterHotkeys(HWND wnd);
@@ -111,12 +149,11 @@ static void ShowMenu(HWND wnd)
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, IDM_SETTINGS, L"Settings...");
     SetMenuDefaultItem(m, IDM_SETTINGS, FALSE);
-    AppendMenuW(m, MF_STRING, IDM_EDIT, L"Open settings file (hot keys)");
-    AppendMenuW(m, MF_STRING, IDM_RELOAD, L"Reload settings file");
     AppendMenuW(m, MF_STRING, IDM_DIAG, L"Save diagnostics...");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, IDM_HELP, L"Help");
     AppendMenuW(m, MF_STRING, IDM_ABOUT, L"About");
+    AppendMenuW(m, MF_STRING, IDM_MORE, L"More from this developer");
     AppendMenuW(m, MF_STRING, IDM_EXIT, L"Exit");
     POINT pt;
     GetCursorPos(&pt);
@@ -135,6 +172,17 @@ static LRESULT CALLBACK MainProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
     switch (msg) {
     case WM_TIMER:
         TrackerOnTimer(wp);
+        // The settings file was edited by hand: pick the changes up.
+        if (wp == PR_TIMER_SLOW && ++g_iniTicks % 5 == 0 && !SettingsIsOpen()) {
+            FILETIME now = IniStamp();
+            if (CompareFileTime(&now, &g_iniStamp) != 0) {
+                g_iniStamp = now;
+                LoadConfig(g_cfg);
+                RegisterHotkeys(wnd);
+                if (!g_cfg.roll) TrackerUnrollAll();
+                TrackerRefreshAll();
+            }
+        }
         return 0;
     case WM_HOTKEY:
         TrackerToggleForeground(wp == HK_PIN ? BTN_PIN : BTN_ROLL);
@@ -153,22 +201,26 @@ static LRESULT CALLBACK MainProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         case IDM_PIN:
             g_cfg.pin = !g_cfg.pin;
             SaveToggles(g_cfg);
+            g_iniStamp = IniStamp();
             TrackerRefreshAll();
             break;
         case IDM_ROLL:
             g_cfg.roll = !g_cfg.roll;
             if (!g_cfg.roll) TrackerUnrollAll(); // as FbX did
             SaveToggles(g_cfg);
+            g_iniStamp = IniStamp();
             TrackerRefreshAll();
             break;
         case IDM_ROLLTOP:
             g_cfg.rolledTopmost = !g_cfg.rolledTopmost;
             SaveToggles(g_cfg);
+            g_iniStamp = IniStamp();
             break;
         case IDM_SETTINGS: {
             std::wstring app;
             app.swap(g_settingsApp);
             ShowSettings(g_hinst, app);
+            g_iniStamp = IniStamp(); // our own save is not a hand edit
             break;
         }
         case IDM_HELP:
@@ -190,23 +242,19 @@ static LRESULT CALLBACK MainProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             }
             break;
         }
-        case IDM_EDIT:
-            ShellExecuteW(wnd, L"open", L"notepad.exe", (L"\"" + g_cfg.path + L"\"").c_str(), nullptr, SW_SHOWNORMAL);
+        case IDM_ABOUT: {
+            static bool open = false;
+            if (open) break;
+            open = true;
+            INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_LINK_CLASS };
+            InitCommonControlsEx(&icc);
+            DialogBoxParamW(g_hinst, MAKEINTRESOURCEW(IDD_ABOUT), nullptr, AboutProc, 0);
+            open = false;
             break;
-        case IDM_RELOAD:
-            LoadConfig(g_cfg);
-            RegisterHotkeys(wnd);
-            if (!g_cfg.roll) TrackerUnrollAll();
-            TrackerRefreshAll();
-            break;
-        case IDM_ABOUT:
-            MessageBoxW(wnd,
-                        L"Pin&Roll " PR_VERSION L"\n\n"
-                        L"Push-pin (always on top) and roll-up title bar buttons for Windows 10 and 11.\n\n"
-                        L"A rewrite of these two functions of FileBox eXtender\n"
-                        L"(C) 1999-2011 Greg Kochaniak, Hyperionics Technology LLC.\n\n"
-                        L"Free software under the GNU General Public License v3 or later.",
-                        L"About Pin&Roll", MB_OK | MB_ICONINFORMATION);
+        }
+        case IDM_MORE:
+            // A page in the repository, so it can be extended without a new release.
+            ShellExecuteW(nullptr, L"open", PR_MORE_URL, nullptr, nullptr, SW_SHOWNORMAL);
             break;
         case IDM_EXIT:
             DestroyWindow(wnd);
@@ -293,6 +341,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     if (!wnd) return 1;
 
     g_mainWnd = wnd;
+    g_iniStamp = IniStamp();
     AddTray(wnd);
     RegisterHotkeys(wnd);
     if (!TrackerInit(inst, wnd)) return 1;

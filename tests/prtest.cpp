@@ -627,6 +627,22 @@ int wmain(int argc, wchar_t** argv)
         }
     }
 
+    // About window (tray menu > About)
+    PostMessageW(FindWindowW(kMainClass, nullptr), WM_COMMAND, 106, 0);
+    {
+        HWND ab = nullptr;
+        Check(WaitFor([&] { return (ab = FindWindowW(nullptr, L"About Pin&Roll")) != nullptr; }), "About window opens");
+        if (ab) {
+            Sleep(700);
+            RECT ar = Rect(ab);
+            InflateRect(&ar, -1, -1);
+            Shot(ar, L"about");
+            PostMessageW(ab, WM_COMMAND, IDOK, 0);
+            Check(WaitFor([&] { return !IsWindow(ab); }), "About window closes");
+            Sleep(300);
+        }
+    }
+
     // --- peek (enabled for this program by the rule above)
     SetForegroundWindow(t);
     SetCursorPos(2, 2);

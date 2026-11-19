@@ -13,6 +13,7 @@ BEGIN
   BEGIN
     BLOCK "040904b0"
     BEGIN
+      VALUE "CompanyName", "Alex Potemkin, ShotPorter"
       VALUE "FileDescription", "Pin&Roll"
       VALUE "ProductName", "Pin&Roll"
       VALUE "FileVersion", "1.0.0.0"
@@ -30,7 +31,7 @@ END
 IDR_HELP_HTML RCDATA "help.html"
 IDR_HELP_PNG RCDATA "help-settings.png"
 
-IDD_SETTINGS DIALOGEX 0, 0, 340, 354
+IDD_SETTINGS DIALOGEX 0, 0, 340, 366
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Pin&Roll - Settings"
 FONT 9, "Segoe UI"
@@ -79,8 +80,22 @@ BEGIN
   LTEXT "Rolled-up height", IDC_RHLABEL, 127, 307, 56, 8
   EDITTEXT IDC_ROLLHEIGHT, 185, 305, 28, 12, ES_AUTOHSCROLL | ES_NUMBER
   LTEXT "pixels (0 = automatic)", IDC_RHLABEL2, 217, 307, 110, 8
-  PUSHBUTTON "&Help", IDC_HELPBTN, 7, 334, 44, 14
-  LTEXT "Changes show immediately. Cancel undoes them.", -1, 57, 338, 164, 8
-  DEFPUSHBUTTON "OK", IDOK, 225, 334, 50, 14
-  PUSHBUTTON "Cancel", IDCANCEL, 283, 334, 50, 14
+  LTEXT "Changes show immediately. Cancel undoes them.", -1, 9, 332, 300, 8
+  PUSHBUTTON "&Help", IDC_HELPBTN, 7, 346, 44, 14
+  PUSHBUTTON "Open .&ini file", IDC_OPENINI, 55, 346, 60, 14
+  DEFPUSHBUTTON "OK", IDOK, 225, 346, 50, 14
+  PUSHBUTTON "Cancel", IDCANCEL, 283, 346, 50, 14
+END
+
+IDD_ABOUT DIALOGEX 0, 0, 250, 150
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "About Pin&Roll"
+FONT 9, "Segoe UI"
+BEGIN
+  LTEXT "", IDC_ABOUTTITLE, 10, 10, 230, 10, SS_NOPREFIX
+  LTEXT "Push-pin (always on top) and roll-up title bar buttons for Windows 10 and 11.", -1, 10, 24, 230, 18
+  CONTROL "", IDC_ABOUTLINKS, "SysLink", WS_TABSTOP, 10, 46, 230, 44
+  LTEXT "Started as a rewrite of these two functions of FileBox eXtender, (C) 1999-2011 Greg Kochaniak, Hyperionics Technology LLC.", -1, 10, 94, 230, 18
+  LTEXT "Free software under the GNU General Public License v3 or later.", -1, 10, 114, 230, 10
+  DEFPUSHBUTTON "OK", IDOK, 190, 130, 50, 14
 END
