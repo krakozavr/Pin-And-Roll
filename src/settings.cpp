@@ -8,7 +8,7 @@
 
 static HWND g_dlg;
 static Config g_backup;
-static bool g_loading;
+static bool g_loading = true; // controls notify before WM_INITDIALOG: ignore until filled in
 
 static const int kRuleControls[] = { IDC_REMOVE, IDC_IGNORE, IDC_NOPIN, IDC_NOROLL, IDC_POSLABEL, IDC_RIGHT, IDC_LEFT,
                                      IDC_OFFLABEL, IDC_OFFSET, IDC_OFFSPIN, IDC_OFFLABEL2, IDC_RHLABEL, IDC_ROLLHEIGHT,
@@ -207,5 +207,7 @@ void ShowSettings(HINSTANCE inst)
     }
     INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_UPDOWN_CLASS | ICC_STANDARD_CLASSES };
     InitCommonControlsEx(&icc);
+    g_loading = true;
     DialogBoxParamW(inst, MAKEINTRESOURCEW(IDD_SETTINGS), nullptr, SettingsProc, 0);
+    g_loading = true;
 }

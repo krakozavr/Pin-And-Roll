@@ -538,6 +538,10 @@ int wmain(int argc, wchar_t** argv)
         Shot(dr, L"settings");
         PostMessageW(dlg, WM_COMMAND, IDCANCEL, 0);
         Check(WaitFor([&] { return !IsWindow(dlg); }), "settings window closes on Cancel");
+        Sleep(700);
+        HWND sb = FindBar(t);
+        RECT sr = Rect(sb);
+        Check(sb && sr.right - sr.left == D(64), "opening and cancelling settings changes nothing");
     }
 
     PostMessageW(FindWindowW(kMainClass, nullptr), WM_CLOSE, 0, 0);
