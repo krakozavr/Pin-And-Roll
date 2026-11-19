@@ -1,118 +1,152 @@
 # Pin&Roll
 
-A Windows 10 / 11 refresh of two functions of **FileBox eXtender** (FbX) by
-Hyperionics Technology LLC: the **push-pin** and **roll-up** title bar buttons.
+Two extra buttons in the title bar of your windows on Windows 10 and 11:
 
 | Button | What it does |
 |---|---|
-| Push-pin | Keeps the window above all other windows ("always on top"). Click again to release it. |
-| Roll-up | Shrinks the window to its title bar to uncover what is beneath. Click again to roll it back down. |
+| **Push-pin** | Keeps the window above all other windows ("always on top"). Click again to release it. |
+| **Roll-up** | Shrinks the window to its title bar so you can see what is behind it. Click again to roll it back down. |
 
-Everything else FbX did (Favorites / Recent folders in file dialogs, dialog
-resizing, Explorer integration) is intentionally left out.
+![Title bars: normal, pinned, rolled up, and a program that draws its own title bar](docs/screenshot.png)
 
-![Normal, pinned and rolled-up title bars](docs/screenshot.png)
+Pin&Roll is one small program (`pr.exe`, no installer) that sits in the
+notification area. It changes nothing inside other programs: it only draws
+its two buttons on top of their title bars.
 
-*Captured by the automated test on Windows Server 2025 (maximized, normal,
-pinned, rolled up).*
+## Download
 
-**Status: preview.** An automated test drives the buttons on real windows and
-passes on Windows Server 2025 and 2022 (workflow in
-`.github/workflows/build.yml`) and under Wine. It has not yet been tried by a
-person on a Windows 11 desktop with everyday applications.
+Get `pr.exe` from the [Releases](../../releases/latest) page. If there is no
+release yet, open the newest successful run under [Actions](../../actions) and
+download the `pinroll-windows-2025` artifact (this needs a GitHub login).
 
-## What is different from FbX 2.x
+### The program is not signed
 
-FbX injected a DLL into every program through global hooks and decided where
-the title bar is by sending hit-test messages. On current Windows that fails
-for many windows (store apps, elevated programs, browsers and other programs
-that draw their own title bar) and puts the buttons in the wrong place when
-display scaling or invisible resize borders are involved.
+Pin&Roll is free, open-source software built by GitHub from the source in
+this repository. It has no paid code-signing certificate, so:
 
-This version injects nothing. One small program:
+- your browser may block or warn about the download: choose to keep the file;
+- Windows may show *"Windows protected your PC"* on first start: click
+  **More info**, then **Run anyway**;
+- antivirus software may be cautious, because a program that draws over other
+  windows and moves them is unusual.
 
-- listens to window events (`SetWinEventHook`, out of process),
-- asks the desktop compositor where the minimize / maximize / close buttons
-  are (`DWMWA_CAPTION_BUTTON_BOUNDS`, `DWMWA_EXTENDED_FRAME_BOUNDS`) and places
-  its two buttons immediately to their left, at any DPI and on any monitor,
-- keeps the buttons directly above their window in the Z order,
-- works the same for 32-bit, 64-bit and ARM64 programs.
-
-## Behaviour kept from FbX
-
-- Button order: roll-up on the left, push-pin next to the system buttons.
-- The pin always shows the real state of the window, also when another tool
-  made it topmost.
-- A rolled-up window keeps its position and width, can be dragged, and
-  unrolls to its previous height where it currently is.
-- Option *When rolled up, keep the window bar on top*.
-- Switching the roll-up button off, or exiting, unrolls all windows.
-- Global offset settings (*move buttons left by N pixels*, plus extra when
-  maximized) and per-program exceptions (*ignore*, *no pushpin*, *no roll-up*,
-  extra offset).
-
-## Deliberate differences
-
-- A pin set while a window is rolled up is kept after unrolling (FbX lost it).
-- Resizing a rolled-up window by hand ends the rolled state (FbX blocked
-  resizing by subclassing the window, which needs injection). Maximizing a
-  rolled-up window shows it in full; restoring it brings the strip back.
-- If Pin&Roll is killed, rolled windows stay usable and are recognised again on the
-  next start.
-- No "Always on top" / "Roll up" entries in the window system menu: adding
-  them requires code inside the other program. Optional hot keys replace them.
-- Buttons are drawn as flat glyphs in the Windows 11 style and pick a light or
-  dark colour from the title bar behind them.
-
-## Known limits
-
-- Programs running as administrator get no buttons unless Pin&Roll itself is
-  started as administrator (Windows blocks the requests otherwise).
-- Programs that draw their own title bar (browsers, Electron and WinUI apps)
-  are asked where their real buttons and the nearest free stretch of title
-  bar are. If there is no free stretch, the buttons sit next to minimize and
-  may cover a control: use an `offset:N` exception to move them, or `ignore`.
-- Exclusive full-screen windows get no buttons.
+If you would rather not trust a download, build it yourself (see
+[Build](#build)); it takes two commands.
 
 ## Use
 
-Run `pr.exe`. It lives in the notification area. Double-click the icon (or
-choose *Settings...* in its menu) for the settings window:
+Run `pr.exe`. A blue pin icon appears near the clock (possibly under the
+**^** arrow).
 
-- the three FbX options, global shift and button size, hot keys, *Start with
-  Windows* and *Run as administrator*;
-- per-program settings: *Pick an app...* lists the running programs; each can
-  be ignored, lose one of the buttons, have the buttons on the right or at the
-  left end of the title bar, shifted sideways and vertically, resized, and
-  given its own rolled-up height.
+- **Click** a title bar button to pin or roll up that window. This also works
+  on windows that are not active.
+- **Right-click** a button for *Customize \<program\>...*, *Settings...* and
+  *Help*.
+- **Double-click** the tray icon for the settings; click it for the menu,
+  including *Help* and *Exit*.
 
-Right-click either button for *Customize <program>...*, which opens the
-settings with that program selected. *Peek* (off by default, also per program)
-shows a rolled-up window in full while the mouse rests on its
-roll-up button and stays on the title bar.
+The built-in **Help** page explains every setting.
+
+![The settings window](docs/settings.png)
+
+### Settings in brief
+
+For all programs: show or hide each button, keep rolled-up windows on top,
+*peek*, a global shift and button size, hot keys, *Start with Windows* and
+*Run as administrator*.
+
+For individual programs (add one with *Pick an app...* or by right-clicking a
+button): ignore the program, keep only one button, put the buttons on the
+right or at the left end of the title bar, shift them sideways and
+vertically, resize them, and set the rolled-up height.
 
 Changes apply while you make them. Everything is stored in
-`%APPDATA%\PinRoll\pinroll.ini`.
+`%APPDATA%\PinRoll\pinroll.ini`, which can also be edited by hand.
 
-*Run as administrator* restarts Pin&Roll elevated (Windows asks once) so that
-elevated programs such as Task Manager get buttons too. Together with *Start
-with Windows* it uses a scheduled task, so logging on does not prompt.
+### How it behaves
 
-`pr.exe --exit` stops a running copy.
+- A rolled-up window keeps its position and width and can be dragged.
+- Maximizing a rolled-up window shows it in full; restoring it brings the
+  strip back.
+- Resizing a rolled-up window by its top or bottom edge ends the rolled state.
+- The buttons hide while a window is dragged and return when you let go.
+- *Peek* (off by default): rest the mouse on the roll-up button of a
+  rolled-up window and it opens; it rolls up again when the mouse leaves the
+  title bar.
+- The pin always shows the window's real state, also when another tool pinned
+  it.
+- Exiting, or switching the roll-up button off, unrolls every window. If
+  Pin&Roll is closed unexpectedly, rolled-up windows are recognised again on
+  the next start.
+
+## Known limits
+
+- **Programs running as administrator** (Task Manager, for example) get
+  buttons only if Pin&Roll runs as administrator too; Windows blocks it
+  otherwise. Use the *Run as administrator* setting.
+- **Programs that draw their own title bar** (browsers, Electron and WinUI
+  apps) are asked where their real buttons and the nearest free stretch of
+  title bar are. Where that fails or the title bar is crowded, the buttons can
+  cover one of the program's own controls; give that program its own
+  position, shift or size in the settings.
+- While a rolled-up window is being dragged, some programs make it taller for
+  the duration of the drag. It returns to a strip when released.
+- Full-screen windows get no buttons.
+- There are no "Always on top" / "Roll up" entries in the window's system
+  menu. Hot keys can be set instead.
+
+## Status
+
+Used daily by its author on Windows 11, with two monitors at different
+scaling. An automated test drives the buttons on real windows with real mouse
+input and runs on Windows Server 2025 and 2022 for every change
+(`.github/workflows/build.yml`). Windows 10 itself has not been tried by a
+person.
 
 ## Build
 
+With Visual Studio 2022 (C++ workload) and CMake:
+
     cmake -B build -A x64
     cmake --build build --config Release
+
+The program is `build\Release\pr.exe`. To run the test:
+
     build\Release\prtest.exe build\Release\pr.exe
 
 `build-mingw.sh` cross-compiles on Linux with mingw-w64.
 
-## Credits and licence
+## How it works
 
-Based on the behaviour of FileBox eXtender v2.01, (C) 1999-2011 Greg
-Kochaniak, Hyperionics Technology LLC, released under the GPL. The roll-up
-technique without injection follows AltSnap; window tracking follows the
-approach of Microsoft PowerToys "Always On Top". No code was copied.
+Pin&Roll injects nothing into other programs. One process:
+
+- listens to window events (`SetWinEventHook`, out of process);
+- asks the desktop compositor where the minimize / maximize / close buttons
+  are (`DWMWA_CAPTION_BUTTON_BOUNDS`, `DWMWA_EXTENDED_FRAME_BOUNDS`), and for
+  self-drawn title bars asks the window itself by hit-testing;
+- keeps a small layered window with the two buttons directly above each
+  window in the Z order;
+- rolls a window up by resizing it to its title bar height.
+
+Because it works from outside, it treats 32-bit, 64-bit and ARM64 programs
+alike.
+
+## Background, credits and licence
+
+Pin&Roll started as a refresh of two functions of **FileBox eXtender** v2.01,
+(C) 1999-2011 Greg Kochaniak, Hyperionics Technology LLC, released under the
+GPL. FileBox eXtender added its buttons by injecting a DLL into every
+program, which no longer works for many windows on current Windows. Its
+other functions (Favorites and Recent folders in file dialogs, dialog
+resizing, Explorer integration) are intentionally left out.
+
+The behaviour of the two buttons follows the original closely, with these
+differences: a pin set while a window is rolled up is kept after unrolling;
+resizing is not blocked while rolled up; and the buttons are flat glyphs that
+take a light or dark colour from the title bar behind them.
+
+The roll-up technique without injection follows AltSnap; window tracking
+follows the approach of Microsoft PowerToys "Always On Top". No code was
+copied from either, or from FileBox eXtender.
 
 GNU General Public License v3 or later, see `LICENSE`.
