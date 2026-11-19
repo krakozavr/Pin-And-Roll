@@ -2,10 +2,11 @@
 // License: GPL-3.0-or-later.
 #include "common.h"
 #include <shellapi.h>
+#include "resource.h"
 
 #define FBX_VERSION L"3.0.0-preview"
 #define WM_TRAY (WM_APP + 1)
-enum { IDM_PIN = 100, IDM_ROLL, IDM_ROLLTOP, IDM_SETTINGS, IDM_EDIT, IDM_RELOAD, IDM_ABOUT, IDM_EXIT, IDM_DIAG };
+enum { IDM_PIN = 100, IDM_ROLL, IDM_ROLLTOP, IDM_SETTINGS, IDM_EDIT, IDM_RELOAD, IDM_ABOUT, IDM_EXIT, IDM_DIAG, IDM_HELP };
 enum { HK_PIN = 1, HK_ROLL = 2 };
 
 static HINSTANCE g_hinst;
@@ -51,6 +52,33 @@ static bool LaunchElevated()
     return ShellExecuteExW(&sei) != 0;
 }
 
+static bool ExtractResource(int id, const std::wstring& file)
+{
+    HRSRC r = FindResourceW(g_hinst, MAKEINTRESOURCEW(id), (LPCWSTR)RT_RCDATA);
+    HGLOBAL g = r ? LoadResource(g_hinst, r) : nullptr;
+    const void* data = g ? LockResource(g) : nullptr;
+    if (!data) return false;
+    HANDLE f = CreateFileW(file.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return false;
+    DWORD w = 0;
+    bool ok = WriteFile(f, data, SizeofResource(g_hinst, r), &w, nullptr) != 0;
+    CloseHandle(f);
+    return ok;
+}
+
+// The help page is built into the program; it is written to the temporary
+// folder and opened with the default browser.
+void AppShowHelp()
+{
+    wchar_t tmp[MAX_PATH];
+    GetTempPathW(MAX_PATH, tmp);
+    std::wstring dir = std::wstring(tmp) + L"FBX-help";
+    CreateDirectoryW(dir.c_str(), nullptr);
+    ExtractResource(IDR_HELP_PNG, dir + L"\\settings.png");
+    if (ExtractResource(IDR_HELP_HTML, dir + L"\\help.html"))
+        ShellExecuteW(nullptr, L"open", (dir + L"\\help.html").c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+
 void AppOpenSettings(const std::wstring& exe)
 {
     g_settingsApp = exe;
@@ -87,6 +115,7 @@ static void ShowMenu(HWND wnd)
     AppendMenuW(m, MF_STRING, IDM_RELOAD, L"Reload settings file");
     AppendMenuW(m, MF_STRING, IDM_DIAG, L"Save diagnostics...");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(m, MF_STRING, IDM_HELP, L"Help");
     AppendMenuW(m, MF_STRING, IDM_ABOUT, L"About");
     AppendMenuW(m, MF_STRING, IDM_EXIT, L"Exit");
     POINT pt;
@@ -142,6 +171,9 @@ static LRESULT CALLBACK MainProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             ShowSettings(g_hinst, app);
             break;
         }
+        case IDM_HELP:
+            AppShowHelp();
+            break;
         case IDM_DIAG: {
             std::wstring text, file;
             TrackerDiagnostics(text);

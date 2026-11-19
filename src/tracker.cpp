@@ -902,6 +902,7 @@ LRESULT CALLBACK BarProc(HWND bar, UINT msg, WPARAM wp, LPARAM lp)
             HMENU m = CreatePopupMenu();
             AppendMenuW(m, MF_STRING, 1, (L"Customize " + exe + L"...").c_str());
             AppendMenuW(m, MF_STRING, 2, L"Settings...");
+            AppendMenuW(m, MF_STRING, 3, L"Help");
             POINT pt;
             GetCursorPos(&pt);
             SetForegroundWindow(g_main); // so that the menu closes on a click elsewhere
@@ -910,6 +911,7 @@ LRESULT CALLBACK BarProc(HWND bar, UINT msg, WPARAM wp, LPARAM lp)
             DestroyMenu(m);
             if (cmd == 1) AppOpenSettings(exe);
             else if (cmd == 2) AppOpenSettings(L"");
+            else if (cmd == 3) AppShowHelp();
         }
         return 0;
     case WM_NCDESTROY:

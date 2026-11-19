@@ -27,6 +27,9 @@ BEGIN
   END
 END
 
+IDR_HELP_HTML RCDATA "help.html"
+IDR_HELP_PNG RCDATA "help-settings.png"
+
 IDD_SETTINGS DIALOGEX 0, 0, 340, 354
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "FBX Pin & Roll-up - Settings"
@@ -76,7 +79,8 @@ BEGIN
   LTEXT "Rolled-up height", IDC_RHLABEL, 127, 307, 56, 8
   EDITTEXT IDC_ROLLHEIGHT, 185, 305, 28, 12, ES_AUTOHSCROLL | ES_NUMBER
   LTEXT "pixels (0 = automatic)", IDC_RHLABEL2, 217, 307, 110, 8
-  LTEXT "Changes show immediately. Cancel undoes them.", -1, 9, 338, 200, 8
+  PUSHBUTTON "&Help", IDC_HELPBTN, 7, 334, 44, 14
+  LTEXT "Changes show immediately. Cancel undoes them.", -1, 57, 338, 164, 8
   DEFPUSHBUTTON "OK", IDOK, 225, 334, 50, 14
   PUSHBUTTON "Cancel", IDCANCEL, 283, 334, 50, 14
 END

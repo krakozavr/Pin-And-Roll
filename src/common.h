@@ -106,6 +106,7 @@ void TrackerListApps(std::vector<std::pair<std::wstring, std::wstring>>& out);
 void AppRegisterHotkeys();
 bool AppRestartElevated(); // false if the user declined the Windows prompt
 void AppOpenSettings(const std::wstring& exe); // settings window with this program selected
+void AppShowHelp(); // opens the built-in help page in the browser
 
 // Text report of how each window's title bar was measured (no window titles).
 void TrackerDiagnostics(std::wstring& out);

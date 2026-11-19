@@ -611,6 +611,22 @@ int wmain(int argc, wchar_t** argv)
         Shot(TitleAreaLeft(t), L"left");
     }
 
+    // settings window again, now with a program in the list (used for the help page)
+    PostMessageW(FindWindowW(kMainClass, nullptr), WM_COMMAND, 103, 0);
+    {
+        HWND d2 = nullptr;
+        WaitFor([&] { return (d2 = FindWindowW(nullptr, L"FBX Pin & Roll-up - Settings")) != nullptr; });
+        if (d2) {
+            Sleep(800);
+            RECT dr = Rect(d2);
+            InflateRect(&dr, -1, -1);
+            Shot(dr, L"settings-app");
+            PostMessageW(d2, WM_COMMAND, IDCANCEL, 0);
+            WaitFor([&] { return !IsWindow(d2); });
+            Sleep(500);
+        }
+    }
+
     // --- peek (enabled for this program by the rule above)
     SetForegroundWindow(t);
     SetCursorPos(2, 2);

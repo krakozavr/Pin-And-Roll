@@ -227,6 +227,9 @@ static INT_PTR CALLBACK SettingsProc(HWND d, UINT msg, WPARAM wp, LPARAM)
         case IDC_PICK:
             PickApp(d);
             return TRUE;
+        case IDC_HELPBTN:
+            AppShowHelp();
+            return TRUE;
         case IDC_REMOVE:
             if (ExceptionRule* r = SelectedRule(d)) {
                 HWND lb = GetDlgItem(d, IDC_APPS);

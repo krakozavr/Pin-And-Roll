@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FBX Pin &amp; Roll-up - Help</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#ffffff; --fg:#1b1b1b; --muted:#5f6368; --line:#d9dce1; --accent:#0067c0; --card:#f5f6f8; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1c1d20; --fg:#ececec; --muted:#a3a7ae; --line:#3a3d43; --accent:#62b0ff; --card:#26282c; }
+  }
+  body { background:var(--bg); color:var(--fg); font:15px/1.55 "Segoe UI",system-ui,sans-serif; margin:0; }
+  main { max-width:860px; margin:0 auto; padding:28px 16px 60px; }
+  h1 { font-size:26px; margin:0 0 4px; }
+  h2 { font-size:19px; margin:34px 0 8px; padding-top:14px; border-top:1px solid var(--line); }
+  h3 { font-size:15px; margin:18px 0 4px; }
+  p, li { margin:6px 0; }
+  .lead { color:var(--muted); margin-top:0; }
+  dl { margin:8px 0; }
+  dt { font-weight:600; margin-top:12px; }
+  dd { margin:2px 0 0 0; padding-left:14px; border-left:2px solid var(--line); }
+  img { max-width:100%; height:auto; border:1px solid var(--line); border-radius:6px; display:block; margin:12px 0; }
+  .glyph { display:inline-block; vertical-align:-4px; }
+  .glyph svg { width:20px; height:20px; stroke:var(--fg); fill:none; stroke-width:1.3; stroke-linecap:round; stroke-linejoin:round; }
+  .note { background:var(--card); border-radius:6px; padding:10px 14px; margin:12px 0; }
+  code { background:var(--card); padding:1px 5px; border-radius:4px; font-size:13.5px; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; }
+  th, td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-weight:600; }
+</style>
+</head>
+<body>
+<main>
+<h1>FBX Pin &amp; Roll-up</h1>
+<p class="lead">Two extra buttons in the title bar of your windows: keep a window on top, or roll it up to its title bar.</p>
+
+<h2>The two buttons</h2>
+<table>
+<tr><th style="width:150px">Button</th><th>What it does</th></tr>
+<tr><td><span class="glyph"><svg viewBox="0 0 16 16"><g transform="rotate(45 8 8)"><path d="M5.5 2h5l-.5 4.5 2.5 3h-9l2.5-3z"/><path d="M8 9.5v5"/></g></svg></span> Push-pin</td>
+<td>Keeps the window above all other windows. Click again to release it. The pin is hollow when off and solid when on, and always shows the window's real state, also when another tool pinned it.</td></tr>
+<tr><td><span class="glyph"><svg viewBox="0 0 16 16"><path d="M3 3.5h10" stroke-width="1.8"/><path d="M4.5 11.5 8 8l3.5 3.5"/></svg></span> Roll-up</td>
+<td>Shrinks the window to its title bar so you can see what is behind it. Click again to roll it back down. A rolled-up window keeps its place and width and can still be dragged.</td></tr>
+</table>
+<ul>
+<li><b>Left-click</b> a button to use it. It also works on windows that are not active.</li>
+<li><b>Right-click</b> a button for <i>Customize &lt;program&gt;...</i>, <i>Settings...</i> and this help.</li>
+<li>The buttons hide while you drag a window and come back when you let go.</li>
+<li>Maximizing a rolled-up window shows it in full; restoring it brings the strip back.</li>
+<li>Resizing a rolled-up window by its top or bottom edge ends the rolled state.</li>
+<li>Exiting FBX, or switching the roll-up button off, unrolls every window.</li>
+</ul>
+
+<h2>The icon in the notification area</h2>
+<p>FBX has no main window. It sits as a blue pin icon near the clock (possibly under the <b>^</b> arrow).</p>
+<ul>
+<li><b>Double-click</b> the icon to open the settings.</li>
+<li><b>Click</b> it for the menu: the three main switches, <i>Settings...</i>, <i>Help</i>, <i>Open settings file</i>, <i>Reload settings file</i>, <i>Save diagnostics...</i>, <i>About</i> and <i>Exit</i>.</li>
+</ul>
+
+<h2>Settings</h2>
+<img src="settings.png" alt="The settings window">
+<p>Every change shows on your windows immediately, so you can position the buttons by eye. <b>OK</b> saves, <b>Cancel</b> puts everything back.</p>
+
+<h3>All programs</h3>
+<dl>
+<dt>Push-pin button / Roll-up button</dt>
+<dd>Show or hide each button everywhere.</dd>
+<dt>When rolled up, keep the window bar on top</dt>
+<dd>A rolled-up strip stays above other windows until you unroll it.</dd>
+<dt>Peek</dt>
+<dd>Rest the mouse on a rolled-up strip for about half a second and the window opens; move away and it rolls up again. Clicking the roll-up button while it is open keeps it open. Off by default.</dd>
+<dt>Move the buttons left by ... pixels, and by ... more if a window is maximized</dt>
+<dd>A nudge for all programs. Negative numbers move the buttons right.</dd>
+<dt>Button size</dt>
+<dd>Size of the buttons in percent, from 40 to 300.</dd>
+<dt>Hot keys for the active window</dt>
+<dd>Click a field and press a combination with Ctrl or Alt, for example Ctrl+Alt+T. Press Backspace in the field to clear it.</dd>
+<dt>Start with Windows</dt>
+<dd>Starts FBX when you sign in.</dd>
+<dt>Run as administrator</dt>
+<dd>Windows does not let a normal program control windows of programs that run as administrator, such as Task Manager, so those get no buttons. With this option FBX restarts with administrator rights (Windows asks once) and they get buttons too. Together with <i>Start with Windows</i> you are not asked again at each sign-in.</dd>
+</dl>
+
+<h3>Individual programs</h3>
+<p>Some programs draw their own title bar and have their own controls where the buttons would go. Give such a program its own settings:</p>
+<ul>
+<li>right-click one of its FBX buttons and choose <i>Customize &lt;program&gt;...</i>, or</li>
+<li>click <b>Pick an app...</b> and choose it from the running programs.</li>
+</ul>
+<p>Select a program in the list to edit it. <b>Remove</b> deletes its settings.</p>
+<dl>
+<dt>Do not handle this program at all</dt>
+<dd>No buttons on its windows.</dd>
+<dt>No push-pin button / No roll-up button</dt>
+<dd>Only one of the two buttons, which also needs half the room.</dd>
+<dt>Peek when rolled up</dt>
+<dd>Ticked: on for this program. Empty: off. Filled: follow the switch under <i>All programs</i>.</dd>
+<dt>Button position</dt>
+<dd><b>Right</b>: next to the window's own minimize / maximize / close buttons. <b>Left</b>: at the left end of the title bar.</dd>
+<dt>Shift left by ... pixels</dt>
+<dd>Moves the buttons sideways; negative numbers move them right. Use the small arrows to nudge. At the left end a negative number (it starts at -40) moves the buttons clear of the window's icon. Once a shift or <i>Left</i> is set, FBX stops searching for free space in that program by itself, so the number means exactly what it says.</dd>
+<dt>Shift down by ... pixels</dt>
+<dd>Moves the buttons down; negative numbers move them up.</dd>
+<dt>Button size</dt>
+<dd>A size just for this program. 0 means the size set under <i>All programs</i>.</dd>
+<dt>Rolled-up height</dt>
+<dd>How tall the rolled-up strip is. 0 lets FBX work it out; set a number if a program's title bar is cut off or too much is left showing.</dd>
+</dl>
+
+<h2>Tips</h2>
+<ul>
+<li><b>Tabbed title bars</b> (Notepad, browsers): if the buttons cover a control such as the new-tab <b>+</b>, give the program a smaller button size (65-75%) or shift the buttons.</li>
+<li><b>Crowded title bars</b>: try <i>Left end of the title bar</i>, or keep only one of the two buttons.</li>
+<li><b>Glyph colour</b>: FBX draws black on light title bars and white on dark ones. After a theme change it can take a few seconds to follow.</li>
+</ul>
+
+<h2>Good to know</h2>
+<ul>
+<li>Full-screen windows get no buttons.</li>
+<li>If FBX is closed unexpectedly, rolled-up windows stay rolled. Start FBX again and one click on the roll-up button restores them.</li>
+<li>Settings are stored in <code>%APPDATA%\FBX\fbx.ini</code>. You can edit the file by hand and choose <i>Reload settings file</i>.</li>
+<li><i>Save diagnostics...</i> writes a short text report about how each window's title bar was measured. It contains program names and positions, no window titles. It is useful when reporting a placement problem.</li>
+<li>FBX changes nothing inside other programs: it only draws its two buttons on top of their title bars.</li>
+</ul>
+
+<h2>About</h2>
+<p>A Windows 10 / 11 rewrite of the push-pin and roll-up buttons of FileBox eXtender, &copy; 1999-2011 Greg Kochaniak, Hyperionics Technology LLC. Free software under the GNU General Public License v3 or later.</p>
+</main>
+</body>
+</html>
