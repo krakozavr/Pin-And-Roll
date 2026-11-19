@@ -38,6 +38,7 @@ struct Tracked {
     bool probeZoomed = false;
     int probeCount = 0, probeWidth = 0;
     int probeFromRight = 0, probeHeight = 0, probeShift = 0;
+    int probeFreeAdjacent = 0; // free title bar directly left of the system buttons, px
     DWORD probeTick = 0;
 
     ButtonType btn[2] = { BTN_NONE, BTN_NONE };
@@ -301,6 +302,15 @@ void ProbeCustomTitleBar(Tracked& t, const Frame& f, LONG style, int count)
     const int need = (barW + fs - 1) / fs + 1;
     int run = 0, shift = 0;
     bool found = false;
+    // how much room is there right next to the buttons? (tab strips keep a
+    // small drag area there that may be narrower than our two buttons)
+    int adjacent = 0;
+    for (int x = capL - D(2); adjacent < barW + D(8) && x > f.wr.left; x -= D(3)) {
+        if (!HitTest(h, x, yc, code)) return;
+        if (code != HTCAPTION) break;
+        adjacent += D(3);
+    }
+    t.probeFreeAdjacent = adjacent;
     for (int i = 0; i < D(260) / fs + need; i++) {
         int x = capL - D(3) - i * fs;
         if (x <= f.wr.left) break;
@@ -367,6 +377,13 @@ void ComputeGeometry(const Tracked& t, LONG style, LONG ex, const Frame& f, int 
     int capH = capB - capT;
     int bh = Clamp(capH, D(20), D(32));
     int bw = D(32);
+    if (f.custom && t.probeValid && !t.manual && extraShift == 0 && t.probeFreeAdjacent > 0 &&
+        t.probeFreeAdjacent < count * bw + D(2)) {
+        // Not enough free room for full-size buttons: make them narrower
+        // rather than cover the program's own controls (e.g. a "new tab" +).
+        int w = (t.probeFreeAdjacent - D(2)) / count;
+        if (w >= D(20)) bw = w;
+    }
     int top = capT + (capH - bh) / 2;
     int shift = D(2) + extraShift + D(g_cfg.moveLeft) + (f.zoomed ? D(g_cfg.moveLeftMaximized) : 0) + D(t.offset);
     bool mirrored = (capL + capR) / 2 < (wr.left + wr.right) / 2; // right-to-left windows
