@@ -59,6 +59,8 @@ struct Config {
     int size = 100;          // button size in percent
     bool runAsAdmin = false; // restart elevated so that elevated programs get buttons too
     bool peek = false;       // show a rolled-up window in full while the mouse is over it
+    bool autoUpdate = false; // look for a new version once a week
+    long long lastUpdateCheck = 0; // seconds since 1970
     Hotkey pinKey, rollKey;
     std::vector<ExceptionRule> exceptions;
 
@@ -108,6 +110,8 @@ void AppRegisterHotkeys();
 bool AppRestartElevated(); // false if the user declined the Windows prompt
 void AppOpenSettings(const std::wstring& exe); // settings window with this program selected
 void AppShowHelp(); // opens the built-in help page in the browser
+// Opens a web address or file with the user's own (not elevated) default program.
+void AppOpen(const std::wstring& target);
 
 // Text report of how each window's title bar was measured (no window titles).
 void TrackerDiagnostics(std::wstring& out);

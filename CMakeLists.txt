@@ -8,7 +8,7 @@ add_executable(pr WIN32
   src/main.cpp src/tracker.cpp src/render.cpp src/config.cpp src/settings.cpp
   src/common.h src/resource.h src/pr.rc)
 target_compile_definitions(pr PRIVATE UNICODE _UNICODE WINVER=0x0A00 _WIN32_WINNT=0x0A00)
-target_link_libraries(pr PRIVATE dwmapi gdiplus shell32 advapi32 user32 gdi32 comctl32 taskschd ole32 oleaut32 uuid)
+target_link_libraries(pr PRIVATE dwmapi gdiplus shell32 advapi32 user32 gdi32 comctl32 taskschd ole32 oleaut32 uuid winhttp)
 
 add_executable(prtest tests/prtest.cpp)
 target_compile_definitions(prtest PRIVATE UNICODE _UNICODE WINVER=0x0A00 _WIN32_WINNT=0x0A00)

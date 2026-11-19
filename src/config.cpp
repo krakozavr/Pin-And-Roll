@@ -28,6 +28,8 @@ static const wchar_t* kDefaultIni =
     L"RunAsAdmin=0\r\n"
     L"; Show a rolled-up window in full while the mouse is over it\r\n"
     L"Peek=0\r\n"
+    L"; Look for a new version once a week (contacts github.com)\r\n"
+    L"CheckForUpdates=0\r\n"
     L"; Optional hot keys acting on the active window, e.g. Ctrl+Alt+T. Empty = none.\r\n"
     L"PinHotkey=\r\n"
     L"RollHotkey=\r\n"
@@ -156,6 +158,10 @@ void LoadConfig(Config& cfg)
     if (cfg.size < 40 || cfg.size > 300) cfg.size = 100;
     cfg.runAsAdmin = GetPrivateProfileIntW(L"Settings", L"RunAsAdmin", 0, ini) != 0;
     cfg.peek = GetPrivateProfileIntW(L"Settings", L"Peek", 0, ini) != 0;
+    cfg.autoUpdate = GetPrivateProfileIntW(L"Settings", L"CheckForUpdates", 0, ini) != 0;
+    wchar_t stamp[32];
+    GetPrivateProfileStringW(L"Settings", L"LastUpdateCheck", L"0", stamp, 32, ini);
+    cfg.lastUpdateCheck = _wtoi64(stamp);
 
     wchar_t buf[128];
     GetPrivateProfileStringW(L"Settings", L"PinHotkey", L"", buf, 128, ini);
@@ -212,6 +218,7 @@ void SaveConfig(const Config& cfg)
     WritePrivateProfileStringW(L"Settings", L"ButtonSize", std::to_wstring(cfg.size).c_str(), ini);
     WritePrivateProfileStringW(L"Settings", L"RunAsAdmin", cfg.runAsAdmin ? L"1" : L"0", ini);
     WritePrivateProfileStringW(L"Settings", L"Peek", cfg.peek ? L"1" : L"0", ini);
+    WritePrivateProfileStringW(L"Settings", L"CheckForUpdates", cfg.autoUpdate ? L"1" : L"0", ini);
     WritePrivateProfileStringW(L"Settings", L"PinHotkey", HotkeyText(cfg.pinKey).c_str(), ini);
     WritePrivateProfileStringW(L"Settings", L"RollHotkey", HotkeyText(cfg.rollKey).c_str(), ini);
 

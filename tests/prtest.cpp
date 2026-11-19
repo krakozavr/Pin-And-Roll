@@ -627,6 +627,23 @@ int wmain(int argc, wchar_t** argv)
         }
     }
 
+    // Check for updates (tray menu): asks GitHub for the latest release
+    PostMessageW(FindWindowW(kMainClass, nullptr), WM_COMMAND, 110, 0);
+    {
+        HWND ub = nullptr;
+        bool shown = WaitFor([&] { return (ub = FindWindowW(nullptr, L"Pin&Roll - Update")) != nullptr; }, 20000);
+        Check(shown, "update check answers");
+        if (ub) {
+            wchar_t text[400] = L"";
+            GetDlgItemTextW(ub, 0xFFFF, text, 400);
+            printf("update check says: %ls\n", text);
+            Check(wcsstr(text, L"latest version") || wcsstr(text, L"is available"),
+                  "update check reached GitHub and understood the answer");
+            PostMessageW(ub, WM_COMMAND, wcsstr(text, L"is available") ? IDNO : IDOK, 0);
+            WaitFor([&] { return !IsWindow(ub); });
+        }
+    }
+
     // About window (tray menu > About)
     PostMessageW(FindWindowW(kMainClass, nullptr), WM_COMMAND, 106, 0);
     {

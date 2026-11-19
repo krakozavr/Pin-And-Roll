@@ -65,6 +65,14 @@ Changes apply while you make them. Everything is stored in
 opens it; hand edits and your own comment lines are kept, and changes are
 picked up when you save the file.
 
+### Updates and privacy
+
+Pin&Roll does not use the internet unless you ask it to: *Check for updates*
+in the tray menu, or the optional weekly check in the settings (off by
+default), asks github.com which release is the latest. Nothing is downloaded
+or installed automatically, and no information about you is sent beyond what
+any visit to a web site reveals (your internet address).
+
 ### How it behaves
 
 - A rolled-up window keeps its position and width and can be dragged.

@@ -4,10 +4,13 @@
 #include <shellapi.h>
 #include "resource.h"
 #include <commctrl.h>
+#include <winhttp.h>
+#include <string>
+#include <ctime>
 
 #define PR_VERSION L"1.0.0"
 #define WM_TRAY (WM_APP + 1)
-enum { IDM_PIN = 100, IDM_ROLL, IDM_ROLLTOP, IDM_SETTINGS, IDM_EDIT, IDM_RELOAD, IDM_ABOUT, IDM_EXIT, IDM_DIAG, IDM_HELP, IDM_MORE };
+enum { IDM_PIN = 100, IDM_ROLL, IDM_ROLLTOP, IDM_SETTINGS, IDM_EDIT, IDM_RELOAD, IDM_ABOUT, IDM_EXIT, IDM_DIAG, IDM_HELP, IDM_MORE, IDM_UPDATE };
 enum { HK_PIN = 1, HK_ROLL = 2 };
 
 static HINSTANCE g_hinst;
@@ -43,6 +46,138 @@ static FILETIME IniStamp()
     return d.ftLastWriteTime;
 }
 
+void AppOpen(const std::wstring& target)
+{
+    // When Pin&Roll runs as administrator, a browser started by it would run
+    // as administrator too. Handing the address to Explorer avoids that.
+    if (IsElevated())
+        ShellExecuteW(nullptr, L"open", L"explorer.exe", (L"\"" + target + L"\"").c_str(), nullptr, SW_SHOWNORMAL);
+    else
+        ShellExecuteW(nullptr, L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+
+// ---- update check -------------------------------------------------------
+// Asks GitHub which release is the latest and compares it with this build.
+// Nothing is downloaded or installed; the user is only told and can open the
+// release page. The request carries no information about the user.
+#define PR_RELEASES_HOST L"api.github.com"
+#define PR_RELEASES_PATH L"/repos/krakozavr/Pin-And-Roll/releases/latest"
+#define PR_RELEASES_PAGE L"https://github.com/krakozavr/Pin-And-Roll/releases/latest"
+#define WM_UPDATE_RESULT (WM_APP + 3)
+static bool g_updateBusy;
+static std::wstring g_newVersion; // offered by the last notification
+
+static DWORD WINAPI UpdateThread(void* param)
+{
+    std::string body;
+    bool ok = false;
+    HINTERNET s = WinHttpOpen(L"PinRoll-update-check", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME,
+                              WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!s) s = WinHttpOpen(L"PinRoll-update-check", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME,
+                            WINHTTP_NO_PROXY_BYPASS, 0);
+    HINTERNET c = nullptr, r = nullptr;
+    if (s) {
+        WinHttpSetTimeouts(s, 8000, 8000, 8000, 8000);
+        c = WinHttpConnect(s, PR_RELEASES_HOST, INTERNET_DEFAULT_HTTPS_PORT, 0);
+    }
+    if (c) r = WinHttpOpenRequest(c, L"GET", PR_RELEASES_PATH, nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                  WINHTTP_FLAG_SECURE);
+    if (r && WinHttpSendRequest(r, L"Accept: application/vnd.github+json\r\n", (DWORD)-1, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+        WinHttpReceiveResponse(r, nullptr)) {
+        DWORD status = 0, cb = sizeof(status);
+        WinHttpQueryHeaders(r, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &status,
+                            &cb, WINHTTP_NO_HEADER_INDEX);
+        if (status == 200) {
+            char buf[4096];
+            DWORD n = 0;
+            while (body.size() < 262144 && WinHttpReadData(r, buf, sizeof(buf), &n) && n) body.append(buf, n);
+            ok = true;
+        }
+    }
+    if (r) WinHttpCloseHandle(r);
+    if (c) WinHttpCloseHandle(c);
+    if (s) WinHttpCloseHandle(s);
+
+    // "tag_name": "v1.2.3"
+    std::wstring* tag = nullptr;
+    size_t p = ok ? body.find("\"tag_name\"") : std::string::npos;
+    if (p != std::string::npos) {
+        size_t a = body.find('"', body.find(':', p) + 1), b = a == std::string::npos ? a : body.find('"', a + 1);
+        if (b != std::string::npos && b - a < 40) {
+            std::string t = body.substr(a + 1, b - a - 1);
+            tag = new std::wstring(t.begin(), t.end());
+        }
+    }
+    if (!PostMessageW(g_mainWnd, WM_UPDATE_RESULT, param != nullptr, (LPARAM)tag)) delete tag;
+    return 0;
+}
+
+static void StartUpdateCheck(bool manual)
+{
+    if (g_updateBusy) return;
+    g_updateBusy = true;
+    HANDLE t = CreateThread(nullptr, 0, UpdateThread, manual ? (void*)1 : nullptr, 0, nullptr);
+    if (t) CloseHandle(t);
+    else g_updateBusy = false;
+}
+
+// true if version text a ("v1.2.3" or "1.2.3") is newer than b
+static bool VersionNewer(const wchar_t* a, const wchar_t* b)
+{
+    int x[3] = { 0, 0, 0 }, y[3] = { 0, 0, 0 };
+    if (*a == L'v' || *a == L'V') a++;
+    if (*b == L'v' || *b == L'V') b++;
+    swscanf(a, L"%d.%d.%d", &x[0], &x[1], &x[2]);
+    swscanf(b, L"%d.%d.%d", &y[0], &y[1], &y[2]);
+    for (int i = 0; i < 3; i++)
+        if (x[i] != y[i]) return x[i] > y[i];
+    return false;
+}
+
+static void OnUpdateResult(HWND wnd, bool manual, std::wstring* tag)
+{
+    g_updateBusy = false;
+    std::wstring latest = tag ? *tag : L"";
+    delete tag;
+    bool newer = !latest.empty() && VersionNewer(latest.c_str(), PR_VERSION);
+    if (manual) {
+        if (latest.empty()) {
+            MessageBoxW(nullptr, L"Could not find out which version is the latest.\nIs this computer connected to the internet?",
+                        L"Pin&Roll - Update", MB_OK | MB_ICONWARNING);
+        } else if (!newer) {
+            MessageBoxW(nullptr, L"You have the latest version (" PR_VERSION L").", L"Pin&Roll - Update",
+                        MB_OK | MB_ICONINFORMATION);
+        } else if (MessageBoxW(nullptr,
+                               (L"Pin&Roll " + latest + L" is available (you have " PR_VERSION L").\n\n"
+                                L"Open the download page?").c_str(),
+                               L"Pin&Roll - Update", MB_YESNO | MB_ICONINFORMATION) == IDYES) {
+            AppOpen(PR_RELEASES_PAGE);
+        }
+    } else if (newer && g_tray) {
+        // automatic check: a quiet notification; clicking it opens the page
+        g_newVersion = latest;
+        NOTIFYICONDATAW n = g_nid;
+        n.uFlags = NIF_INFO;
+        n.dwInfoFlags = NIIF_INFO;
+        lstrcpynW(n.szInfoTitle, (L"Pin&Roll " + latest + L" is available").c_str(), 64);
+        lstrcpynW(n.szInfo, L"Click here to open the download page.", 256);
+        Shell_NotifyIconW(NIM_MODIFY, &n);
+    }
+    (void)wnd;
+}
+
+// Weekly automatic check, if switched on.
+static void MaybeAutoUpdateCheck()
+{
+    if (!g_cfg.autoUpdate) return;
+    long long now = (long long)time(nullptr);
+    if (now - g_cfg.lastUpdateCheck < 7 * 24 * 3600) return;
+    g_cfg.lastUpdateCheck = now;
+    WritePrivateProfileStringW(L"Settings", L"LastUpdateCheck", std::to_wstring(now).c_str(), g_cfg.path.c_str());
+    g_iniStamp = IniStamp();
+    StartUpdateCheck(false);
+}
+
 static INT_PTR CALLBACK AboutProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
@@ -59,7 +194,7 @@ static INT_PTR CALLBACK AboutProc(HWND d, UINT msg, WPARAM wp, LPARAM lp)
     case WM_NOTIFY: {
         NMHDR* h = (NMHDR*)lp;
         if (h->idFrom == IDC_ABOUTLINKS && (h->code == NM_CLICK || h->code == NM_RETURN))
-            ShellExecuteW(nullptr, L"open", ((NMLINK*)lp)->item.szUrl, nullptr, nullptr, SW_SHOWNORMAL);
+            AppOpen(((NMLINK*)lp)->item.szUrl);
         return TRUE;
     }
     case WM_COMMAND:
@@ -114,7 +249,7 @@ void AppShowHelp()
     CreateDirectoryW(dir.c_str(), nullptr);
     ExtractResource(IDR_HELP_PNG, dir + L"\\settings.png");
     if (ExtractResource(IDR_HELP_HTML, dir + L"\\help.html"))
-        ShellExecuteW(nullptr, L"open", (dir + L"\\help.html").c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        AppOpen(dir + L"\\help.html");
 }
 
 void AppOpenSettings(const std::wstring& exe)
@@ -154,6 +289,7 @@ static void ShowMenu(HWND wnd)
     AppendMenuW(m, MF_STRING, IDM_HELP, L"Help");
     AppendMenuW(m, MF_STRING, IDM_ABOUT, L"About");
     AppendMenuW(m, MF_STRING, IDM_MORE, L"More from this developer");
+    AppendMenuW(m, MF_STRING, IDM_UPDATE, L"Check for updates");
     AppendMenuW(m, MF_STRING, IDM_EXIT, L"Exit");
     POINT pt;
     GetCursorPos(&pt);
@@ -170,10 +306,15 @@ static LRESULT CALLBACK MainProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     }
     switch (msg) {
+    case WM_UPDATE_RESULT:
+        OnUpdateResult(wnd, wp != 0, (std::wstring*)lp);
+        return 0;
     case WM_TIMER:
         TrackerOnTimer(wp);
+        if (wp == PR_TIMER_SLOW) g_iniTicks++;
+        if (wp == PR_TIMER_SLOW && g_iniTicks % 1000 == 10) MaybeAutoUpdateCheck(); // soon after start, then every 5 min
         // The settings file was edited by hand: pick the changes up.
-        if (wp == PR_TIMER_SLOW && ++g_iniTicks % 5 == 0 && !SettingsIsOpen()) {
+        if (wp == PR_TIMER_SLOW && g_iniTicks % 5 == 0 && !SettingsIsOpen()) {
             FILETIME now = IniStamp();
             if (CompareFileTime(&now, &g_iniStamp) != 0) {
                 g_iniStamp = now;
@@ -188,7 +329,8 @@ static LRESULT CALLBACK MainProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         TrackerToggleForeground(wp == HK_PIN ? BTN_PIN : BTN_ROLL);
         return 0;
     case WM_TRAY:
-        if (LOWORD(lp) == WM_LBUTTONDBLCLK) PostMessageW(wnd, WM_COMMAND, IDM_SETTINGS, 0);
+        if (LOWORD(lp) == NIN_BALLOONUSERCLICK) AppOpen(PR_RELEASES_PAGE);
+        else if (LOWORD(lp) == WM_LBUTTONDBLCLK) PostMessageW(wnd, WM_COMMAND, IDM_SETTINGS, 0);
         else if (LOWORD(lp) == WM_RBUTTONUP || LOWORD(lp) == WM_LBUTTONUP || LOWORD(lp) == WM_CONTEXTMENU) ShowMenu(wnd);
         return 0;
     case WM_SETTINGCHANGE:
@@ -252,9 +394,12 @@ static LRESULT CALLBACK MainProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             open = false;
             break;
         }
+        case IDM_UPDATE:
+            StartUpdateCheck(true);
+            break;
         case IDM_MORE:
             // A page in the repository, so it can be extended without a new release.
-            ShellExecuteW(nullptr, L"open", PR_MORE_URL, nullptr, nullptr, SW_SHOWNORMAL);
+            AppOpen(PR_MORE_URL);
             break;
         case IDM_EXIT:
             DestroyWindow(wnd);

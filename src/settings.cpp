@@ -100,6 +100,7 @@ static void Apply(HWND d)
     if (size >= 40 && size <= 300) g_cfg.size = size; // ignore half-typed values
     g_cfg.runAsAdmin = Checked(d, IDC_ADMIN);
     g_cfg.peek = Checked(d, IDC_PEEK);
+    g_cfg.autoUpdate = Checked(d, IDC_UPDATE);
     EnableWindow(GetDlgItem(d, IDC_PEEK), g_cfg.roll);
     Hotkey pk = GetKey(d, IDC_PINKEY), rk = GetKey(d, IDC_ROLLKEY);
     if (pk.vk != g_cfg.pinKey.vk || pk.mod != g_cfg.pinKey.mod || rk.vk != g_cfg.rollKey.vk ||
@@ -171,6 +172,7 @@ static INT_PTR CALLBACK SettingsProc(HWND d, UINT msg, WPARAM wp, LPARAM)
         SetDlgItemInt(d, IDC_BTNSIZE, (UINT)g_cfg.size, FALSE);
         Check(d, IDC_ADMIN, g_cfg.runAsAdmin);
         Check(d, IDC_PEEK, g_cfg.peek);
+        Check(d, IDC_UPDATE, g_cfg.autoUpdate);
         EnableWindow(GetDlgItem(d, IDC_PEEK), g_cfg.roll);
         SetKey(d, IDC_PINKEY, g_cfg.pinKey);
         SetKey(d, IDC_ROLLKEY, g_cfg.rollKey);
@@ -264,6 +266,7 @@ static INT_PTR CALLBACK SettingsProc(HWND d, UINT msg, WPARAM wp, LPARAM)
             }
             return TRUE;
         case IDC_ADMIN:
+        case IDC_UPDATE:
         case IDC_PEEK:
         case IDC_APPPEEK:
         case IDC_PINBTN:
