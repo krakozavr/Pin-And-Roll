@@ -7,7 +7,7 @@ Two extra buttons in the title bar of your windows on Windows 10 and 11:
 | **Push-pin** | Keeps the window above all other windows ("always on top"). Click again to release it. |
 | **Roll-up** | Shrinks the window to its title bar so you can see what is behind it. Click again to roll it back down. |
 
-![Title bars: normal, pinned, rolled up, and a program that draws its own title bar](docs/screenshot.png)
+![Title bars: normal, pinned and rolled up](docs/screenshot.png)
 
 Pin&Roll is one small program (`pr.exe`, no installer) that sits in the
 notification area. It changes nothing inside other programs: it only draws
