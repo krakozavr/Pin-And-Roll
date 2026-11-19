@@ -1,9 +1,16 @@
 name: release
 
-# Pushing a tag such as v1.0.0 builds, tests and publishes pr.exe as a release.
+# Builds, tests and publishes pr.exe as a release. Start it either by pushing
+# a tag such as v1.0.0, or by hand (Actions > release > Run workflow) with the
+# version to publish; the tag is then created on the commit that was built.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to publish, e.g. v1.0.0'
+        required: true
 
 permissions:
   contents: write
@@ -25,7 +32,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "${{ github.ref_name }}"
+          $tag = "${{ inputs.version || github.ref_name }}"
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') { Write-Error "not a version tag: $tag"; exit 1 }
           $hash = (Get-FileHash build\Release\pr.exe -Algorithm SHA256).Hash.ToLower()
           $notes = @"
           Pin&Roll $tag for Windows 10 and 11 (64-bit; also runs on ARM64 Windows).
@@ -38,4 +46,4 @@ jobs:
           SHA-256 of pr.exe: ``$hash``
           "@
           $notes | Out-File -Encoding utf8 notes.md
-          gh release create $tag build\Release\pr.exe --title "Pin&Roll $tag" --notes-file notes.md
+          gh release create $tag build\Release\pr.exe --title "Pin&Roll $tag" --notes-file notes.md --target "${{ github.sha }}"
