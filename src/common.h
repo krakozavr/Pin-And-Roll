@@ -1,6 +1,6 @@
-// FBX Pin & Roll-up - a Windows 10/11 refresh of the push-pin and roll-up
+// Pin&Roll - a Windows 10/11 refresh of the push-pin and roll-up
 // title bar buttons of FileBox eXtender (Hyperionics Technology LLC, GPL).
-// Copyright (C) 2026 FBX contributors. License: GPL-3.0-or-later.
+// Copyright (C) 2026 Pin&Roll contributors. License: GPL-3.0-or-later.
 #pragma once
 
 #ifndef UNICODE
@@ -20,14 +20,14 @@
 #include <string>
 #include <vector>
 
-#define FBX_MAIN_CLASS L"FbxPinRollMain"
-#define FBX_BAR_CLASS L"FbxPinRollBar"
+#define PR_MAIN_CLASS L"PinRollMain"
+#define PR_BAR_CLASS L"PinRollBar"
 // Window properties. The first one is set on our bar windows, the other
-// three on a rolled-up target so that the state survives a crash of FBX.
-#define FBX_PROP_TARGET L"FbxTarget"
-#define FBX_PROP_OLDHEIGHT L"FbxOldHeight"
-#define FBX_PROP_ROLLEDHEIGHT L"FbxRolledHeight"
-#define FBX_PROP_FORCEDTOP L"FbxForcedTopmost"
+// three on a rolled-up target so that the state survives a crash of Pin&Roll.
+#define PR_PROP_TARGET L"PinRollTarget"
+#define PR_PROP_OLDHEIGHT L"PinRollOldHeight"
+#define PR_PROP_ROLLEDHEIGHT L"PinRollRolledHeight"
+#define PR_PROP_FORCEDTOP L"PinRollForcedTopmost"
 
 enum ButtonType { BTN_NONE = 0, BTN_ROLL = 1, BTN_PIN = 2 };
 
@@ -74,6 +74,7 @@ bool IsAutoStart();
 // asAdmin: start elevated at logon without a prompt (uses a scheduled task).
 void SetAutoStart(bool on, bool asAdmin);
 void ConvertAutoStartIfNeeded();
+void MigrateOldAutoStart(bool asAdmin);
 bool IsElevated();
 std::wstring HotkeyText(const Hotkey& hk);
 bool SystemAppsDark();
@@ -113,5 +114,5 @@ void TrackerDiagnostics(std::wstring& out);
 
 // settings.cpp
 void ShowSettings(HINSTANCE inst, const std::wstring& selectExe);
-#define FBX_TIMER_SLOW 1
-#define FBX_TIMER_BURST 2
+#define PR_TIMER_SLOW 1
+#define PR_TIMER_BURST 2

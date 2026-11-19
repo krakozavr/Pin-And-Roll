@@ -1,4 +1,4 @@
-# FBX Pin & Roll-up
+# Pin&Roll
 
 A Windows 10 / 11 refresh of two functions of **FileBox eXtender** (FbX) by
 Hyperionics Technology LLC: the **push-pin** and **roll-up** title bar buttons.
@@ -57,7 +57,7 @@ This version injects nothing. One small program:
 - Resizing a rolled-up window by hand ends the rolled state (FbX blocked
   resizing by subclassing the window, which needs injection). Maximizing a
   rolled-up window shows it in full; restoring it brings the strip back.
-- If FBX is killed, rolled windows stay usable and are recognised again on the
+- If Pin&Roll is killed, rolled windows stay usable and are recognised again on the
   next start.
 - No "Always on top" / "Roll up" entries in the window system menu: adding
   them requires code inside the other program. Optional hot keys replace them.
@@ -66,7 +66,7 @@ This version injects nothing. One small program:
 
 ## Known limits
 
-- Programs running as administrator get no buttons unless FBX itself is
+- Programs running as administrator get no buttons unless Pin&Roll itself is
   started as administrator (Windows blocks the requests otherwise).
 - Programs that draw their own title bar (browsers, Electron and WinUI apps)
   are asked where their real buttons and the nearest free stretch of title
@@ -76,7 +76,7 @@ This version injects nothing. One small program:
 
 ## Use
 
-Run `fbx.exe`. It lives in the notification area. Double-click the icon (or
+Run `pr.exe`. It lives in the notification area. Double-click the icon (or
 choose *Settings...* in its menu) for the settings window:
 
 - the three FbX options, global shift and button size, hot keys, *Start with
@@ -88,22 +88,23 @@ choose *Settings...* in its menu) for the settings window:
 
 Right-click either button for *Customize <program>...*, which opens the
 settings with that program selected. *Peek* (off by default, also per program)
-shows a rolled-up window in full while the mouse rests on it.
+shows a rolled-up window in full while the mouse rests on its
+roll-up button and stays on the title bar.
 
 Changes apply while you make them. Everything is stored in
-`%APPDATA%\FBX\fbx.ini`.
+`%APPDATA%\PinRoll\pinroll.ini`.
 
-*Run as administrator* restarts FBX elevated (Windows asks once) so that
+*Run as administrator* restarts Pin&Roll elevated (Windows asks once) so that
 elevated programs such as Task Manager get buttons too. Together with *Start
 with Windows* it uses a scheduled task, so logging on does not prompt.
 
-`fbx.exe --exit` stops a running copy.
+`pr.exe --exit` stops a running copy.
 
 ## Build
 
     cmake -B build -A x64
     cmake --build build --config Release
-    build\Release\fbxtest.exe build\Release\fbx.exe
+    build\Release\prtest.exe build\Release\pr.exe
 
 `build-mingw.sh` cross-compiles on Linux with mingw-w64.
 

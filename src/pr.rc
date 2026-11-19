@@ -1,7 +1,7 @@
 #include <windows.h>
 #include <commctrl.h>
 #include "resource.h"
-1 24 "fbx.manifest"
+1 24 "pr.manifest"
 
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION 3,0,0,0
@@ -13,12 +13,12 @@ BEGIN
   BEGIN
     BLOCK "040904b0"
     BEGIN
-      VALUE "FileDescription", "FBX Pin & Roll-up"
-      VALUE "ProductName", "FBX Pin & Roll-up"
+      VALUE "FileDescription", "Pin&Roll"
+      VALUE "ProductName", "Pin&Roll"
       VALUE "FileVersion", "3.0.0.0"
       VALUE "ProductVersion", "3.0.0-preview"
       VALUE "LegalCopyright", "GPL-3.0-or-later. Based on FileBox eXtender (C) Hyperionics Technology LLC."
-      VALUE "OriginalFilename", "fbx.exe"
+      VALUE "OriginalFilename", "pr.exe"
     END
   END
   BLOCK "VarFileInfo"
@@ -32,14 +32,14 @@ IDR_HELP_PNG RCDATA "help-settings.png"
 
 IDD_SETTINGS DIALOGEX 0, 0, 340, 354
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "FBX Pin & Roll-up - Settings"
+CAPTION "Pin&Roll - Settings"
 FONT 9, "Segoe UI"
 BEGIN
   GROUPBOX "All programs", -1, 7, 4, 326, 148
   AUTOCHECKBOX "&Push-pin button to keep windows on top", IDC_PINBTN, 15, 16, 300, 10
   AUTOCHECKBOX "&Roll-up button to display only the title bar of a window", IDC_ROLLBTN, 15, 28, 300, 10
   AUTOCHECKBOX "When rolled up, &keep the window bar on top", IDC_ROLLTOP, 27, 40, 288, 10
-  AUTOCHECKBOX "Peek: show a rolled-up window while the mouse rests on it", IDC_PEEK, 27, 52, 288, 10
+  AUTOCHECKBOX "Peek: show a rolled-up window while the mouse rests on its roll-up button", IDC_PEEK, 27, 52, 288, 10
   LTEXT "Move the buttons left by", -1, 15, 69, 82, 8
   EDITTEXT IDC_MOVELEFT, 99, 67, 28, 12, ES_AUTOHSCROLL
   LTEXT "pixels, and by", -1, 131, 69, 46, 8

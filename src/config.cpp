@@ -9,7 +9,7 @@
 #include <oleauto.h>
 
 static const wchar_t* kDefaultIni =
-    L"; FBX Pin & Roll-up settings. Use \"Reload settings\" in the tray menu after editing.\r\n"
+    L"; Pin&Roll settings. Use \"Reload settings\" in the tray menu after editing.\r\n"
     L"[Settings]\r\n"
     L"; Push-pin button to keep windows on top\r\n"
     L"PinButton=1\r\n"
@@ -70,10 +70,16 @@ std::wstring DefaultConfigPath()
 {
     wchar_t dir[MAX_PATH] = L"";
     if (FAILED(SHGetFolderPathW(nullptr, CSIDL_APPDATA | CSIDL_FLAG_CREATE, nullptr, 0, dir)))
-        return L"fbx.ini";
-    std::wstring p = std::wstring(dir) + L"\\FBX";
+        return L"pinroll.ini";
+    std::wstring p = std::wstring(dir) + L"\\PinRoll";
     CreateDirectoryW(p.c_str(), nullptr);
-    return p + L"\\fbx.ini";
+    std::wstring ini = p + L"\\pinroll.ini";
+    // Settings from when the program was still called FBX.
+    std::wstring old = std::wstring(dir) + L"\\FBX\\fbx.ini";
+    if (GetFileAttributesW(ini.c_str()) == INVALID_FILE_ATTRIBUTES &&
+        GetFileAttributesW(old.c_str()) != INVALID_FILE_ATTRIBUTES)
+        CopyFileW(old.c_str(), ini.c_str(), TRUE);
+    return ini;
 }
 
 static Hotkey ParseHotkey(const std::wstring& text)
@@ -239,9 +245,9 @@ void SaveConfig(const Config& cfg)
 }
 
 static const wchar_t* kRunKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
-static const wchar_t* kRunName = L"FBX Pin & Roll-up";
+static const wchar_t* kRunName = L"Pin&Roll";
 
-static const wchar_t* kTaskName = L"FBX Pin and Roll-up";
+static const wchar_t* kTaskName = L"PinRoll";
 
 bool IsElevated()
 {
@@ -376,6 +382,29 @@ static void DeleteLogonTask()
     }
 }
 
+// Start-up entries made under the old name point at the old file: replace them.
+void MigrateOldAutoStart(bool asAdmin)
+{
+    bool had = false;
+    HKEY k;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, kRunKey, 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &k) == ERROR_SUCCESS) {
+        if (RegQueryValueExW(k, L"FBX Pin & Roll-up", nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS) {
+            RegDeleteValueW(k, L"FBX Pin & Roll-up");
+            had = true;
+        }
+        RegCloseKey(k);
+    }
+    if (IsElevated()) {
+        if (ITaskFolder* root = TaskRoot()) {
+            BSTR name = SysAllocString(L"FBX Pin and Roll-up");
+            if (SUCCEEDED(root->DeleteTask(name, 0))) had = true;
+            SysFreeString(name);
+            root->Release();
+        }
+    }
+    if (had) SetAutoStart(true, asAdmin);
+}
+
 void ConvertAutoStartIfNeeded()
 {
     // Elevated, and start-up is still the plain entry: turn it into the
@@ -394,7 +423,7 @@ void SetAutoStart(bool on, bool asAdmin)
         SetRunKey(false);
         return;
     }
-    // Plain start-up entry. (With asAdmin but no rights yet, FBX elevates
+    // Plain start-up entry. (With asAdmin but no rights yet, Pin&Roll elevates
     // itself after logon and converts this entry into the task.)
     SetRunKey(on);
     if (!on || !asAdmin) DeleteLogonTask();

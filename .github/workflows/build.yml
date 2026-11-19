@@ -26,15 +26,15 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force shots | Out-Null
           cmd /c ver
-          build\Release\fbxtest.exe build\Release\fbx.exe --shot shots\${{ matrix.os }}
+          build\Release\prtest.exe build\Release\pr.exe --shot shots\${{ matrix.os }}
       - name: Start-up entry (scheduled task when "run as administrator" is set)
         if: always()
         run: |
           Set-Content -Path at.ini -Value "[Settings]`r`nRunAsAdmin=1"
-          Start-Process -Wait build\Release\fbx.exe -ArgumentList '--config', "$PWD\at.ini", '--autostart', 'on'
+          Start-Process -Wait build\Release\pr.exe -ArgumentList '--config', "$PWD\at.ini", '--autostart', 'on'
           schtasks /query /tn "FBX Pin and Roll-up" /xml
           if ($LASTEXITCODE -ne 0) { Write-Error "task was not created"; exit 1 }
-          Start-Process -Wait build\Release\fbx.exe -ArgumentList '--config', "$PWD\at.ini", '--autostart', 'off'
+          Start-Process -Wait build\Release\pr.exe -ArgumentList '--config', "$PWD\at.ini", '--autostart', 'off'
           schtasks /query /tn "FBX Pin and Roll-up" 2>$null
           if ($LASTEXITCODE -eq 0) { Write-Error "task was not removed"; exit 1 }
           exit 0
@@ -42,7 +42,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: fbx-${{ matrix.os }}
+          name: pinroll-${{ matrix.os }}
           path: |
-            build/Release/fbx.exe
+            build/Release/pr.exe
             shots/*.png

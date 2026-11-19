@@ -203,12 +203,12 @@ static INT_PTR CALLBACK SettingsProc(HWND d, UINT msg, WPARAM wp, LPARAM)
                 // Windows asks for permission once; a new elevated copy takes over.
                 if (!AppRestartElevated())
                     MessageBoxW(nullptr,
-                                L"FBX is still running without administrator rights.\n"
+                                L"Pin&Roll is still running without administrator rights.\n"
                                 L"It will ask again the next time it starts.",
-                                L"FBX Pin & Roll-up", MB_OK | MB_ICONINFORMATION);
+                                L"Pin&Roll", MB_OK | MB_ICONINFORMATION);
             } else if (adminChanged && !g_cfg.runAsAdmin && IsElevated()) {
-                MessageBoxW(nullptr, L"FBX will run without administrator rights the next time it starts.",
-                            L"FBX Pin & Roll-up", MB_OK | MB_ICONINFORMATION);
+                MessageBoxW(nullptr, L"Pin&Roll will run without administrator rights the next time it starts.",
+                            L"Pin&Roll", MB_OK | MB_ICONINFORMATION);
             }
             return TRUE;
         }

@@ -1,6 +1,6 @@
-// Integration test for FBX Pin & Roll-up. It opens real windows, starts
-// fbx.exe and drives the title bar buttons the way a user would.
-//   fbxtest <path to fbx.exe> [--shot <png path>]
+// Integration test for Pin&Roll. It opens real windows, starts
+// pr.exe and drives the title bar buttons the way a user would.
+//   prtest <path to pr.exe> [--shot <png path>]
 // License: GPL-3.0-or-later.
 #ifndef UNICODE
 #define UNICODE
@@ -14,12 +14,12 @@
 #include <functional>
 #include <vector>
 
-static const wchar_t* kBarClass = L"FbxPinRollBar";
-static const wchar_t* kMainClass = L"FbxPinRollMain";
-static const wchar_t* kTargetProp = L"FbxTarget";
+static const wchar_t* kBarClass = L"PinRollBar";
+static const wchar_t* kMainClass = L"PinRollMain";
+static const wchar_t* kTargetProp = L"PinRollTarget";
 
 static int g_fail = 0, g_pass = 0;
-static std::wstring g_fbx, g_ini, g_shot;
+static std::wstring g_app, g_ini, g_shot;
 static HWND g_target, g_second, g_custom;
 // Layout of the self-drawn title bar of the "custom" test window (pixels at 96 dpi).
 enum { CT_H = 48, CT_BTN = 60, CT_CTRL = 90 };
@@ -105,17 +105,17 @@ static DWORD WINAPI TargetThread(void*)
     wc.hInstance = GetModuleHandleW(nullptr);
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
     wc.hCursor = LoadCursorW(nullptr, (LPCWSTR)IDC_ARROW);
-    wc.lpszClassName = L"FbxTestTarget";
+    wc.lpszClassName = L"PinRollTestTarget";
     RegisterClassW(&wc);
-    g_target = CreateWindowExW(0, wc.lpszClassName, L"FBX test window", WS_OVERLAPPEDWINDOW, 200, 150, 700, 450,
+    g_target = CreateWindowExW(0, wc.lpszClassName, L"Pin&Roll test window", WS_OVERLAPPEDWINDOW, 200, 150, 700, 450,
                                nullptr, nullptr, wc.hInstance, nullptr);
-    g_second = CreateWindowExW(0, wc.lpszClassName, L"FBX second window", WS_OVERLAPPEDWINDOW, 260, 420, 500, 300,
+    g_second = CreateWindowExW(0, wc.lpszClassName, L"Second window", WS_OVERLAPPEDWINDOW, 260, 420, 500, 300,
                                nullptr, nullptr, wc.hInstance, nullptr);
     WNDCLASSW cc = wc;
     cc.lpfnWndProc = CustomProc;
-    cc.lpszClassName = L"FbxTestCustom";
+    cc.lpszClassName = L"PinRollTestCustom";
     RegisterClassW(&cc);
-    g_custom = CreateWindowExW(0, cc.lpszClassName, L"FBX custom title bar", WS_OVERLAPPEDWINDOW, 300, 480, 760, 260,
+    g_custom = CreateWindowExW(0, cc.lpszClassName, L"Custom title bar", WS_OVERLAPPEDWINDOW, 300, 480, 760, 260,
                                nullptr, nullptr, wc.hInstance, nullptr);
     ShowWindow(g_target, SW_SHOWNORMAL);
     SetEvent(g_ready);
@@ -151,9 +151,9 @@ static int CountBars()
     return c.count;
 }
 
-static bool StartFbx()
+static bool StartApp()
 {
-    std::wstring cmd = L"\"" + g_fbx + L"\" --no-tray --config \"" + g_ini + L"\"";
+    std::wstring cmd = L"\"" + g_app + L"\" --no-tray --config \"" + g_ini + L"\"";
     STARTUPINFOW si = { sizeof(si) };
     std::vector<wchar_t> buf(cmd.begin(), cmd.end());
     buf.push_back(0);
@@ -281,15 +281,15 @@ int wmain(int argc, wchar_t** argv)
 {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     if (argc < 2) {
-        printf("usage: fbxtest <fbx.exe> [--shot <prefix>]\n");
+        printf("usage: prtest <pr.exe> [--shot <prefix>]\n");
         return 2;
     }
-    g_fbx = argv[1];
+    g_app = argv[1];
     for (int i = 2; i + 1 < argc; i++)
         if (!wcscmp(argv[i], L"--shot")) g_shot = argv[i + 1];
     wchar_t tmp[MAX_PATH];
     GetTempPathW(MAX_PATH, tmp);
-    g_ini = std::wstring(tmp) + L"fbxtest.ini";
+    g_ini = std::wstring(tmp) + L"prtest.ini";
     DeleteFileW(g_ini.c_str());
 
     Gdiplus::GdiplusStartupInput gin;
@@ -305,7 +305,7 @@ int wmain(int argc, wchar_t** argv)
     auto D = [dpi](int v) { return MulDiv(v, dpi, 96); };
     printf("target=%p dpi=%d screen=%dx%d\n", (void*)t, dpi, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
 
-    Check(StartFbx(), "fbx.exe starts");
+    Check(StartApp(), "pr.exe starts");
     Check(WaitFor([&] { return FindBar(t) != nullptr; }, 10000), "buttons appear on an existing window");
     HWND bar = FindBar(t);
     if (!bar) {
@@ -552,7 +552,7 @@ int wmain(int argc, wchar_t** argv)
     ClickRoll(t);
     Check(WaitFor([&] { return Height(t) < D(70); }), "roll again before exit");
     {
-        std::wstring cmd = L"\"" + g_fbx + L"\" --exit";
+        std::wstring cmd = L"\"" + g_app + L"\" --exit";
         STARTUPINFOW si = { sizeof(si) };
         PROCESS_INFORMATION pi;
         std::vector<wchar_t> buf(cmd.begin(), cmd.end());
@@ -563,18 +563,18 @@ int wmain(int argc, wchar_t** argv)
             CloseHandle(pi.hThread);
         }
     }
-    Check(WaitForSingleObject(g_pi.hProcess, 10000) == WAIT_OBJECT_0, "fbx.exe --exit stops the running instance");
+    Check(WaitForSingleObject(g_pi.hProcess, 10000) == WAIT_OBJECT_0, "pr.exe --exit stops the running instance");
     Check(WaitFor([&] { return Height(t) == h0; }), "exit: rolled windows are unrolled");
     Check(CountBars() == 0, "exit: no button windows are left behind");
 
     // --- crash recovery
-    Check(StartFbx() && WaitFor([&] { return FindBar(t) != nullptr; }, 10000), "restart");
+    Check(StartApp() && WaitFor([&] { return FindBar(t) != nullptr; }, 10000), "restart");
     ClickRoll(t);
     WaitFor([&] { return Height(t) < D(70); });
     TerminateProcess(g_pi.hProcess, 9);
     WaitForSingleObject(g_pi.hProcess, 5000);
     Check(Height(t) < D(70), "after a crash the window is still rolled");
-    Check(StartFbx() && WaitFor([&] { return FindBar(t) != nullptr; }, 10000), "restart after crash");
+    Check(StartApp() && WaitFor([&] { return FindBar(t) != nullptr; }, 10000), "restart after crash");
     Sleep(500);
     ClickRoll(t);
     Check(WaitFor([&] { return Height(t) == h0; }), "crash recovery: one click restores the original height");
@@ -582,7 +582,7 @@ int wmain(int argc, wchar_t** argv)
     // --- settings window (opened the way the tray menu does)
     PostMessageW(FindWindowW(kMainClass, nullptr), WM_COMMAND, 103, 0);
     HWND dlg = nullptr;
-    Check(WaitFor([&] { return (dlg = FindWindowW(nullptr, L"FBX Pin & Roll-up - Settings")) != nullptr; }),
+    Check(WaitFor([&] { return (dlg = FindWindowW(nullptr, L"Pin&Roll - Settings")) != nullptr; }),
           "settings window opens");
     if (dlg) {
         Sleep(800);
@@ -600,8 +600,8 @@ int wmain(int argc, wchar_t** argv)
     WaitForSingleObject(g_pi.hProcess, 10000);
 
     // --- per-program rule: buttons at the left end of the title bar
-    WritePrivateProfileStringW(L"Exceptions", L"fbxtest.exe", L"left,offset:-40,peek", g_ini.c_str());
-    Check(StartFbx() && WaitFor([&] { return FindBar(t) != nullptr; }, 10000), "restart with a 'left' rule");
+    WritePrivateProfileStringW(L"Exceptions", L"prtest.exe", L"left,offset:-40,peek", g_ini.c_str());
+    Check(StartApp() && WaitFor([&] { return FindBar(t) != nullptr; }, 10000), "restart with a 'left' rule");
     Sleep(400);
     {
         RECT e = Rect(t), b = Rect(FindBar(t));
@@ -615,7 +615,7 @@ int wmain(int argc, wchar_t** argv)
     PostMessageW(FindWindowW(kMainClass, nullptr), WM_COMMAND, 103, 0);
     {
         HWND d2 = nullptr;
-        WaitFor([&] { return (d2 = FindWindowW(nullptr, L"FBX Pin & Roll-up - Settings")) != nullptr; });
+        WaitFor([&] { return (d2 = FindWindowW(nullptr, L"Pin&Roll - Settings")) != nullptr; });
         if (d2) {
             Sleep(800);
             RECT dr = Rect(d2);
@@ -636,13 +636,18 @@ int wmain(int argc, wchar_t** argv)
     Sleep(900);
     Check(Height(t) < D(70), "peek: stays rolled while the mouse is elsewhere");
     {
-        RECT r = Rect(t);
+        RECT r = Rect(t), b = Rect(FindBar(t));
         SetCursorPos((r.left + r.right) / 2, r.top + D(14));
-        Check(WaitFor([&] { return Height(t) == h0; }, 4000), "peek: opens while the mouse rests on the strip");
-        Sleep(700);
-        Check(Height(t) == h0, "peek: stays open while the mouse is over the window");
+        Sleep(1200);
+        Check(Height(t) < D(70), "peek: resting on the title bar alone does not open it");
+        SetCursorPos(b.left + (b.right - b.left) / 4, (b.top + b.bottom) / 2); // the roll-up button
+        Check(WaitFor([&] { return Height(t) == h0; }, 4000), "peek: opens while the mouse rests on the roll-up button");
+        SetCursorPos((r.left + r.right) / 2, r.top + D(14));
+        Sleep(1200);
+        Check(Height(t) == h0, "peek: stays open while the mouse is on the title bar");
+        SetCursorPos((r.left + r.right) / 2, r.top + D(200)); // into the window's content
+        Check(WaitFor([&] { return Height(t) < D(70); }, 4000), "peek: rolls back up when the mouse leaves the title bar");
         SetCursorPos(2, 2);
-        Check(WaitFor([&] { return Height(t) < D(70); }, 4000), "peek: rolls back up when the mouse leaves");
         Sleep(700);
         ClickRoll(t);
         Check(WaitFor([&] { return Height(t) == h0; }), "peek: the button still unrolls for good");

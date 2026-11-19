@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>FBX Pin &amp; Roll-up - Help</title>
+<title>Pin&amp;Roll - Help</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root { --bg:#ffffff; --fg:#1b1b1b; --muted:#5f6368; --line:#d9dce1; --accent:#0067c0; --card:#f5f6f8; }
@@ -31,7 +31,7 @@
 </head>
 <body>
 <main>
-<h1>FBX Pin &amp; Roll-up</h1>
+<h1>Pin&amp;Roll</h1>
 <p class="lead">Two extra buttons in the title bar of your windows: keep a window on top, or roll it up to its title bar.</p>
 
 <h2>The two buttons</h2>
@@ -48,11 +48,11 @@
 <li>The buttons hide while you drag a window and come back when you let go.</li>
 <li>Maximizing a rolled-up window shows it in full; restoring it brings the strip back.</li>
 <li>Resizing a rolled-up window by its top or bottom edge ends the rolled state.</li>
-<li>Exiting FBX, or switching the roll-up button off, unrolls every window.</li>
+<li>Exiting Pin&amp;Roll, or switching the roll-up button off, unrolls every window.</li>
 </ul>
 
 <h2>The icon in the notification area</h2>
-<p>FBX has no main window. It sits as a blue pin icon near the clock (possibly under the <b>^</b> arrow).</p>
+<p>Pin&amp;Roll has no main window. It sits as a blue pin icon near the clock (possibly under the <b>^</b> arrow).</p>
 <ul>
 <li><b>Double-click</b> the icon to open the settings.</li>
 <li><b>Click</b> it for the menu: the three main switches, <i>Settings...</i>, <i>Help</i>, <i>Open settings file</i>, <i>Reload settings file</i>, <i>Save diagnostics...</i>, <i>About</i> and <i>Exit</i>.</li>
@@ -69,7 +69,7 @@
 <dt>When rolled up, keep the window bar on top</dt>
 <dd>A rolled-up strip stays above other windows until you unroll it.</dd>
 <dt>Peek</dt>
-<dd>Rest the mouse on a rolled-up strip for about half a second and the window opens; move away and it rolls up again. Clicking the roll-up button while it is open keeps it open. Off by default.</dd>
+<dd>Rest the mouse on the roll-up button of a rolled-up window for about half a second and the window opens. It stays open while the mouse is on the title bar and rolls up again as soon as it leaves. Clicking the roll-up button while it is open keeps it open. Off by default.</dd>
 <dt>Move the buttons left by ... pixels, and by ... more if a window is maximized</dt>
 <dd>A nudge for all programs. Negative numbers move the buttons right.</dd>
 <dt>Button size</dt>
@@ -77,15 +77,15 @@
 <dt>Hot keys for the active window</dt>
 <dd>Click a field and press a combination with Ctrl or Alt, for example Ctrl+Alt+T. Press Backspace in the field to clear it.</dd>
 <dt>Start with Windows</dt>
-<dd>Starts FBX when you sign in.</dd>
+<dd>Starts Pin&amp;Roll when you sign in.</dd>
 <dt>Run as administrator</dt>
-<dd>Windows does not let a normal program control windows of programs that run as administrator, such as Task Manager, so those get no buttons. With this option FBX restarts with administrator rights (Windows asks once) and they get buttons too. Together with <i>Start with Windows</i> you are not asked again at each sign-in.</dd>
+<dd>Windows does not let a normal program control windows of programs that run as administrator, such as Task Manager, so those get no buttons. With this option Pin&amp;Roll restarts with administrator rights (Windows asks once) and they get buttons too. Together with <i>Start with Windows</i> you are not asked again at each sign-in.</dd>
 </dl>
 
 <h3>Individual programs</h3>
 <p>Some programs draw their own title bar and have their own controls where the buttons would go. Give such a program its own settings:</p>
 <ul>
-<li>right-click one of its FBX buttons and choose <i>Customize &lt;program&gt;...</i>, or</li>
+<li>right-click one of its Pin&amp;Roll buttons and choose <i>Customize &lt;program&gt;...</i>, or</li>
 <li>click <b>Pick an app...</b> and choose it from the running programs.</li>
 </ul>
 <p>Select a program in the list to edit it. <b>Remove</b> deletes its settings.</p>
@@ -99,29 +99,29 @@
 <dt>Button position</dt>
 <dd><b>Right</b>: next to the window's own minimize / maximize / close buttons. <b>Left</b>: at the left end of the title bar.</dd>
 <dt>Shift left by ... pixels</dt>
-<dd>Moves the buttons sideways; negative numbers move them right. Use the small arrows to nudge. At the left end a negative number (it starts at -40) moves the buttons clear of the window's icon. Once a shift or <i>Left</i> is set, FBX stops searching for free space in that program by itself, so the number means exactly what it says.</dd>
+<dd>Moves the buttons sideways; negative numbers move them right. Use the small arrows to nudge. At the left end a negative number (it starts at -40) moves the buttons clear of the window's icon. Once a shift or <i>Left</i> is set, Pin&amp;Roll stops searching for free space in that program by itself, so the number means exactly what it says.</dd>
 <dt>Shift down by ... pixels</dt>
 <dd>Moves the buttons down; negative numbers move them up.</dd>
 <dt>Button size</dt>
 <dd>A size just for this program. 0 means the size set under <i>All programs</i>.</dd>
 <dt>Rolled-up height</dt>
-<dd>How tall the rolled-up strip is. 0 lets FBX work it out; set a number if a program's title bar is cut off or too much is left showing.</dd>
+<dd>How tall the rolled-up strip is. 0 lets Pin&amp;Roll work it out; set a number if a program's title bar is cut off or too much is left showing.</dd>
 </dl>
 
 <h2>Tips</h2>
 <ul>
 <li><b>Tabbed title bars</b> (Notepad, browsers): if the buttons cover a control such as the new-tab <b>+</b>, give the program a smaller button size (65-75%) or shift the buttons.</li>
 <li><b>Crowded title bars</b>: try <i>Left end of the title bar</i>, or keep only one of the two buttons.</li>
-<li><b>Glyph colour</b>: FBX draws black on light title bars and white on dark ones. After a theme change it can take a few seconds to follow.</li>
+<li><b>Glyph colour</b>: Pin&amp;Roll draws black on light title bars and white on dark ones. After a theme change it can take a few seconds to follow.</li>
 </ul>
 
 <h2>Good to know</h2>
 <ul>
 <li>Full-screen windows get no buttons.</li>
-<li>If FBX is closed unexpectedly, rolled-up windows stay rolled. Start FBX again and one click on the roll-up button restores them.</li>
-<li>Settings are stored in <code>%APPDATA%\FBX\fbx.ini</code>. You can edit the file by hand and choose <i>Reload settings file</i>.</li>
+<li>If Pin&amp;Roll is closed unexpectedly, rolled-up windows stay rolled. Start Pin&amp;Roll again and one click on the roll-up button restores them.</li>
+<li>Settings are stored in <code>%APPDATA%\PinRoll\pinroll.ini</code>. You can edit the file by hand and choose <i>Reload settings file</i>.</li>
 <li><i>Save diagnostics...</i> writes a short text report about how each window's title bar was measured. It contains program names and positions, no window titles. It is useful when reporting a placement problem.</li>
-<li>FBX changes nothing inside other programs: it only draws its two buttons on top of their title bars.</li>
+<li>Pin&amp;Roll changes nothing inside other programs: it only draws its two buttons on top of their title bars.</li>
 </ul>
 
 <h2>About</h2>

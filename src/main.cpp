@@ -1,10 +1,10 @@
-// FBX Pin & Roll-up - entry point, tray icon and menu.
+// Pin&Roll - entry point, tray icon and menu.
 // License: GPL-3.0-or-later.
 #include "common.h"
 #include <shellapi.h>
 #include "resource.h"
 
-#define FBX_VERSION L"3.0.0-preview"
+#define PR_VERSION L"3.0.0-preview"
 #define WM_TRAY (WM_APP + 1)
 enum { IDM_PIN = 100, IDM_ROLL, IDM_ROLLTOP, IDM_SETTINGS, IDM_EDIT, IDM_RELOAD, IDM_ABOUT, IDM_EXIT, IDM_DIAG, IDM_HELP };
 enum { HK_PIN = 1, HK_ROLL = 2 };
@@ -27,7 +27,7 @@ static void AddTray(HWND wnd)
     g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     g_nid.uCallbackMessage = WM_TRAY;
     g_nid.hIcon = CreateAppIcon(GetSystemMetrics(SM_CXSMICON));
-    lstrcpynW(g_nid.szTip, L"FBX Pin & Roll-up", 64);
+    lstrcpynW(g_nid.szTip, L"Pin&&&Roll", 64); // "&&&" shows one ampersand in a tray tip
     Shell_NotifyIconW(NIM_ADD, &g_nid);
 }
 
@@ -37,7 +37,7 @@ void AppRegisterHotkeys()
     if (g_mainWnd) RegisterHotkeys(g_mainWnd);
 }
 
-// Starts an elevated copy of FBX (Windows shows its permission prompt).
+// Starts an elevated copy of Pin&Roll (Windows shows its permission prompt).
 static bool LaunchElevated()
 {
     wchar_t exe[MAX_PATH];
@@ -72,7 +72,7 @@ void AppShowHelp()
 {
     wchar_t tmp[MAX_PATH];
     GetTempPathW(MAX_PATH, tmp);
-    std::wstring dir = std::wstring(tmp) + L"FBX-help";
+    std::wstring dir = std::wstring(tmp) + L"PinRoll-help";
     CreateDirectoryW(dir.c_str(), nullptr);
     ExtractResource(IDR_HELP_PNG, dir + L"\\settings.png");
     if (ExtractResource(IDR_HELP_HTML, dir + L"\\help.html"))
@@ -179,7 +179,7 @@ static LRESULT CALLBACK MainProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             TrackerDiagnostics(text);
             wchar_t tmp[MAX_PATH];
             GetTempPathW(MAX_PATH, tmp);
-            file = std::wstring(tmp) + L"fbx-diagnostics.txt";
+            file = std::wstring(tmp) + L"pinroll-diagnostics.txt";
             HANDLE f = CreateFileW(file.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
             if (f != INVALID_HANDLE_VALUE) {
                 DWORD w;
@@ -201,12 +201,12 @@ static LRESULT CALLBACK MainProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             break;
         case IDM_ABOUT:
             MessageBoxW(wnd,
-                        L"FBX Pin & Roll-up " FBX_VERSION L"\n\n"
+                        L"Pin&Roll " PR_VERSION L"\n\n"
                         L"Push-pin (always on top) and roll-up title bar buttons for Windows 10 and 11.\n\n"
                         L"A rewrite of these two functions of FileBox eXtender\n"
                         L"(C) 1999-2011 Greg Kochaniak, Hyperionics Technology LLC.\n\n"
                         L"Free software under the GNU General Public License v3 or later.",
-                        L"About FBX", MB_OK | MB_ICONINFORMATION);
+                        L"About Pin&Roll", MB_OK | MB_ICONINFORMATION);
             break;
         case IDM_EXIT:
             DestroyWindow(wnd);
@@ -251,7 +251,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
 
     if (wantExit) {
         // Ask a running instance to quit (it unrolls all windows first).
-        HWND w = FindWindowW(FBX_MAIN_CLASS, nullptr);
+        HWND w = FindWindowW(PR_MAIN_CLASS, nullptr);
         if (w) {
             PostMessageW(w, WM_CLOSE, 0, 0);
             for (int i = 0; i < 100 && IsWindow(w); i++) Sleep(50);
@@ -261,22 +261,23 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
 
     LoadConfig(g_cfg);
 
-    if (autoStartCmd >= 0) { // fbx.exe --autostart on|off
+    if (autoStartCmd >= 0) { // pr.exe --autostart on|off
         SetAutoStart(autoStartCmd == 1, g_cfg.runAsAdmin);
         return 0;
     }
 
     // "Run as administrator" is set and we are not elevated: hand over to
     // an elevated copy. If the prompt is declined we carry on as we are.
-    if (g_cfg.runAsAdmin && !IsElevated() && !FindWindowW(FBX_MAIN_CLASS, nullptr) && LaunchElevated()) return 0;
+    if (g_cfg.runAsAdmin && !IsElevated() && !FindWindowW(PR_MAIN_CLASS, nullptr) && LaunchElevated()) return 0;
 
     // One instance only. A copy started to replace us (--wait) is patient.
-    HANDLE mutex = CreateMutexW(nullptr, FALSE, L"Local\\FbxPinRollSingleInstance");
+    HANDLE mutex = CreateMutexW(nullptr, FALSE, L"Local\\PinRollSingleInstance");
     DWORD got = mutex ? WaitForSingleObject(mutex, wait ? 10000 : 0) : WAIT_FAILED;
     if (got != WAIT_OBJECT_0 && got != WAIT_ABANDONED) return 0;
 
     // Elevated now, and start-up is still the plain kind: convert it so that
     // logging on does not bring up the permission prompt.
+    MigrateOldAutoStart(g_cfg.runAsAdmin);
     if (g_cfg.runAsAdmin) ConvertAutoStartIfNeeded();
 
     RenderInit();
@@ -284,10 +285,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     WNDCLASSW wc = {};
     wc.lpfnWndProc = MainProc;
     wc.hInstance = inst;
-    wc.lpszClassName = FBX_MAIN_CLASS;
+    wc.lpszClassName = PR_MAIN_CLASS;
     RegisterClassW(&wc);
     g_taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
-    HWND wnd = CreateWindowExW(WS_EX_TOOLWINDOW, FBX_MAIN_CLASS, L"FBX Pin & Roll-up", WS_POPUP, 0, 0, 0, 0, nullptr,
+    HWND wnd = CreateWindowExW(WS_EX_TOOLWINDOW, PR_MAIN_CLASS, L"Pin&Roll", WS_POPUP, 0, 0, 0, 0, nullptr,
                                nullptr, inst, nullptr);
     if (!wnd) return 1;
 

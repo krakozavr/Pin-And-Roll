@@ -1,11 +1,11 @@
 // Window tracking, button placement, pin and roll-up actions.
 //
 // Unlike the original FileBox eXtender, nothing is injected into other
-// programs. FBX listens to accessibility (WinEvent) notifications from its
+// programs. Pin&Roll listens to accessibility (WinEvent) notifications from its
 // own process and keeps a small layered "bar" window directly above each
 // eligible top-level window. All calls made on foreign windows are either
 // pure window-manager queries or asynchronous, so a hung program cannot
-// hang FBX.
+// hang Pin&Roll.
 //
 // License: GPL-3.0-or-later.
 #include "common.h"
@@ -28,7 +28,7 @@ struct Tracked {
     int peekRule = -1;
 
     // Peek: a rolled-up window shown in full while the mouse is over it.
-    bool peeking = false;
+    bool peeking = false, peekArmed = true; // armed: the mouse has left the button since the last roll
     int peekCount = 0;
 
     // The user is dragging the window (system move/size loop).
@@ -89,7 +89,7 @@ inline int Clamp(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v)
 void Burst()
 {
     g_burst = 10;
-    SetTimer(g_main, FBX_TIMER_BURST, 40, nullptr);
+    SetTimer(g_main, PR_TIMER_BURST, 40, nullptr);
 }
 
 bool IsCloaked(HWND h)
@@ -114,7 +114,7 @@ bool ExcludedClass(HWND h)
     static const wchar_t* k[] = {
         L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd", L"Progman", L"WorkerW",
         L"Windows.UI.Core.CoreWindow", L"XamlExplorerHostIslandWindow",
-        L"TopLevelWindowForOverflowXamlIsland", L"#32768", FBX_BAR_CLASS, FBX_MAIN_CLASS,
+        L"TopLevelWindowForOverflowXamlIsland", L"#32768", PR_BAR_CLASS, PR_MAIN_CLASS,
     };
     wchar_t cls[128] = L"";
     GetClassNameW(h, cls, 128);
@@ -459,9 +459,9 @@ bool IsFullscreen(HWND h, const RECT& wr)
 
 void ClearRollProps(HWND h)
 {
-    RemovePropW(h, FBX_PROP_OLDHEIGHT);
-    RemovePropW(h, FBX_PROP_ROLLEDHEIGHT);
-    RemovePropW(h, FBX_PROP_FORCEDTOP);
+    RemovePropW(h, PR_PROP_OLDHEIGHT);
+    RemovePropW(h, PR_PROP_ROLLEDHEIGHT);
+    RemovePropW(h, PR_PROP_FORCEDTOP);
 }
 
 // The window is no longer rolled up (we unrolled it, or it was resized).
@@ -605,7 +605,7 @@ void UpdateBar(Tracked& t)
             // Rolled while maximized, then restored as a strip.
             t.zoomedAtRoll = t.suspended = false;
             t.oldHeight = t.normalHeight;
-            SetPropW(h, FBX_PROP_OLDHEIGHT, (HANDLE)(INT_PTR)t.oldHeight);
+            SetPropW(h, PR_PROP_OLDHEIGHT, (HANDLE)(INT_PTR)t.oldHeight);
         } else {
             ClearRolled(t);
         }
@@ -632,11 +632,11 @@ void UpdateBar(Tracked& t)
     }
 
     if (!t.bar) {
-        t.bar = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, FBX_BAR_CLASS, L"", WS_POPUP,
+        t.bar = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, PR_BAR_CLASS, L"", WS_POPUP,
                                 g.bar.left, g.bar.top, g.bar.right - g.bar.left, g.bar.bottom - g.bar.top, nullptr,
                                 nullptr, g_inst, nullptr);
         if (!t.bar) return;
-        SetPropW(t.bar, FBX_PROP_TARGET, (HANDLE)h);
+        SetPropW(t.bar, PR_PROP_TARGET, (HANDLE)h);
         t.shownCount = 0;
     }
 
@@ -700,17 +700,17 @@ Tracked* TryTrack(HWND h)
     RequestSample(t);
     ApplyException(t);
 
-    // Adopt a window that was rolled up by a previous instance of FBX.
-    int oldH = (int)(INT_PTR)GetPropW(h, FBX_PROP_OLDHEIGHT);
+    // Adopt a window that was rolled up by a previous instance of Pin&Roll.
+    int oldH = (int)(INT_PTR)GetPropW(h, PR_PROP_OLDHEIGHT);
     if (oldH > 0) {
         RECT wr;
         GetWindowRect(h, &wr);
-        int rh = (int)(INT_PTR)GetPropW(h, FBX_PROP_ROLLEDHEIGHT);
+        int rh = (int)(INT_PTR)GetPropW(h, PR_PROP_ROLLEDHEIGHT);
         t.rolled = true;
         t.oldHeight = t.normalHeight = oldH;
         t.zoomedAtRoll = IsZoomed(h) != 0;
         t.rolledHeight = rh > 0 ? rh : wr.bottom - wr.top;
-        t.forcedTopmost = GetPropW(h, FBX_PROP_FORCEDTOP) != nullptr;
+        t.forcedTopmost = GetPropW(h, PR_PROP_FORCEDTOP) != nullptr;
     }
     UpdateBar(t);
     return &t;
@@ -769,9 +769,9 @@ void Roll(Tracked& t)
     t.zoomedAtRoll = f.zoomed;
     t.suspended = false;
     t.forcedTopmost = forced;
-    SetPropW(h, FBX_PROP_OLDHEIGHT, (HANDLE)(INT_PTR)t.oldHeight);
-    SetPropW(h, FBX_PROP_ROLLEDHEIGHT, (HANDLE)(INT_PTR)t.rolledHeight);
-    if (forced) SetPropW(h, FBX_PROP_FORCEDTOP, (HANDLE)(INT_PTR)1);
+    SetPropW(h, PR_PROP_OLDHEIGHT, (HANDLE)(INT_PTR)t.oldHeight);
+    SetPropW(h, PR_PROP_ROLLEDHEIGHT, (HANDLE)(INT_PTR)t.rolledHeight);
+    if (forced) SetPropW(h, PR_PROP_FORCEDTOP, (HANDLE)(INT_PTR)1);
 
     // SWP_NOSENDCHANGING lets the window go below its normal minimum size
     // (the original FbX subclassed the window to achieve the same).
@@ -781,6 +781,7 @@ void Roll(Tracked& t)
     t.rolled = true;
     t.rollPending = true;
     t.rollTick = GetTickCount();
+    t.peekArmed = false; // the mouse is on the roll-up button right now: do not pop open again
     Burst();
 }
 
@@ -822,7 +823,7 @@ void TogglePin(Tracked& t)
     if (t.rolled && t.forcedTopmost) {
         // The user decided; do not undo it when the window is unrolled.
         t.forcedTopmost = false;
-        RemovePropW(h, FBX_PROP_FORCEDTOP);
+        RemovePropW(h, PR_PROP_FORCEDTOP);
     }
     SetWindowPos(h, topmost ? HWND_NOTOPMOST : HWND_TOPMOST, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
@@ -841,7 +842,7 @@ void DoButton(Tracked& t, ButtonType b)
 
 Tracked* FromBar(HWND bar)
 {
-    HWND target = (HWND)GetPropW(bar, FBX_PROP_TARGET);
+    HWND target = (HWND)GetPropW(bar, PR_PROP_TARGET);
     auto it = g_win.find(target);
     return (it != g_win.end() && it->second.bar == bar) ? &it->second : nullptr;
 }
@@ -915,7 +916,7 @@ LRESULT CALLBACK BarProc(HWND bar, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
     case WM_NCDESTROY:
-        RemovePropW(bar, FBX_PROP_TARGET);
+        RemovePropW(bar, PR_PROP_TARGET);
         break;
     }
     return DefWindowProcW(bar, msg, wp, lp);
@@ -981,7 +982,7 @@ bool TrackerInit(HINSTANCE inst, HWND mainWnd)
     wc.lpfnWndProc = BarProc;
     wc.hInstance = inst;
     wc.hCursor = LoadCursorW(nullptr, (LPCWSTR)IDC_ARROW);
-    wc.lpszClassName = FBX_BAR_CLASS;
+    wc.lpszClassName = PR_BAR_CLASS;
     if (!RegisterClassW(&wc)) return false;
 
     Hook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND);
@@ -991,7 +992,7 @@ bool TrackerInit(HINSTANCE inst, HWND mainWnd)
     Hook(EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED);
 
     EnumWindows(EnumProc, 0);
-    SetTimer(g_main, FBX_TIMER_SLOW, 300, nullptr);
+    SetTimer(g_main, PR_TIMER_SLOW, 300, nullptr);
     return true;
 }
 
@@ -1054,9 +1055,21 @@ void PeekPoll()
             top = TopWindowAt(pt);
             haveTop = true;
         }
-        bool over = PtInRect(&wr, pt) && (top == h || top == t.bar);
+        // Opens when the mouse rests on the roll-up button; stays open only
+        // while the mouse is on the title bar (the strip) or on our buttons.
+        RECT rollBtn = {}, strip = wr;
+        strip.bottom = wr.top + t.rolledHeight;
+        for (int i = 0; i < t.nBtn; i++) {
+            if (t.btn[i] != BTN_ROLL) continue;
+            int bw = (t.shownRect.right - t.shownRect.left) / t.nBtn;
+            rollBtn = { t.shownRect.left + i * bw, t.shownRect.top, t.shownRect.left + (i + 1) * bw,
+                        t.shownRect.bottom };
+        }
+        bool onButton = top == t.bar && PtInRect(&rollBtn, pt);
+        bool over = (PtInRect(&strip, pt) && top == h) || top == t.bar;
+        if (!onButton) t.peekArmed = true;
         if (!t.peeking) {
-            if (over && !button) {
+            if (onButton && t.peekArmed && !button) {
                 if (++t.peekCount >= 2) { // rested there for a moment: open
                     t.peeking = true;
                     t.peekCount = 0;
@@ -1069,16 +1082,7 @@ void PeekPoll()
             }
             continue;
         }
-        // Open. Stay open over the window itself and over anything else the
-        // same program shows (menus, dialogs).
-        bool same = over;
-        if (!same && top) {
-            DWORD a = 0, b = 0;
-            GetWindowThreadProcessId(top, &a);
-            GetWindowThreadProcessId(h, &b);
-            same = a == b || top == t.bar;
-        }
-        if (same || button || t.inMoveSize) {
+        if (over || button || t.inMoveSize) {
             t.peekCount = 0;
             continue;
         }
@@ -1091,7 +1095,7 @@ void PeekPoll()
         int height = wr.bottom - wr.top;
         if (height > t.rolledHeight + 2) { // remember a new size chosen while open
             t.oldHeight = height;
-            SetPropW(h, FBX_PROP_OLDHEIGHT, (HANDLE)(INT_PTR)height);
+            SetPropW(h, PR_PROP_OLDHEIGHT, (HANDLE)(INT_PTR)height);
         }
         t.peeking = false;
         t.rollPending = true;
@@ -1106,9 +1110,9 @@ void PeekPoll()
 
 void TrackerOnTimer(UINT_PTR id)
 {
-    if (id == FBX_TIMER_BURST) {
-        if (--g_burst <= 0) KillTimer(g_main, FBX_TIMER_BURST);
-    } else if (id != FBX_TIMER_SLOW) {
+    if (id == PR_TIMER_BURST) {
+        if (--g_burst <= 0) KillTimer(g_main, PR_TIMER_BURST);
+    } else if (id != PR_TIMER_SLOW) {
         return;
     }
     std::vector<HWND> dead;
@@ -1117,9 +1121,9 @@ void TrackerOnTimer(UINT_PTR id)
         if (kv.second.dead) dead.push_back(kv.first);
     }
     for (HWND h : dead) Untrack(h);
-    if (id == FBX_TIMER_SLOW) PeekPoll();
+    if (id == PR_TIMER_SLOW) PeekPoll();
 
-    if (id == FBX_TIMER_SLOW && ++g_slowTicks % 5 == 0) {
+    if (id == PR_TIMER_SLOW && ++g_slowTicks % 5 == 0) {
         // Safety net for windows whose events we missed.
         EnumWindows(EnumProc, 0);
         if (g_slowTicks % 100 == 0) {
@@ -1147,7 +1151,7 @@ void TrackerListApps(std::vector<std::pair<std::wstring, std::wstring>>& out)
 void TrackerDiagnostics(std::wstring& out)
 {
     wchar_t b[512];
-    swprintf(b, 512, L"FBX diagnostics. elevated=%d size=%d%% moveLeft=%d/%d\r\n"
+    swprintf(b, 512, L"Pin&Roll diagnostics. elevated=%d size=%d%% moveLeft=%d/%d\r\n"
                      L"Hit-test letters, read from the right edge leftwards in 6 px steps:\r\n"
                      L"  X close, x maximize, m minimize, C draggable title bar, c program control, . other\r\n\r\n",
              IsElevated(), g_cfg.size, g_cfg.moveLeft, g_cfg.moveLeftMaximized);
@@ -1224,8 +1228,8 @@ void TrackerShutdown()
     for (HWINEVENTHOOK h : g_hooks) UnhookWinEvent(h);
     g_hooks.clear();
     if (g_main) {
-        KillTimer(g_main, FBX_TIMER_SLOW);
-        KillTimer(g_main, FBX_TIMER_BURST);
+        KillTimer(g_main, PR_TIMER_SLOW);
+        KillTimer(g_main, PR_TIMER_BURST);
     }
     // Like FbX: leave no window rolled up behind.
     TrackerUnrollAll();
