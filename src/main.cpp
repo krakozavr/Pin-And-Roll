@@ -27,7 +27,7 @@ static void AddTray(HWND wnd)
     g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     g_nid.uCallbackMessage = WM_TRAY;
     g_nid.hIcon = CreateAppIcon(GetSystemMetrics(SM_CXSMICON));
-    lstrcpynW(g_nid.szTip, L"Pin&&&Roll", 64); // "&&&" shows one ampersand in a tray tip
+    lstrcpynW(g_nid.szTip, L"Pin&Roll", 64);
     Shell_NotifyIconW(NIM_ADD, &g_nid);
 }
 
