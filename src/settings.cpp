@@ -12,7 +12,32 @@ static bool g_loading = true; // controls notify before WM_INITDIALOG: ignore un
 
 static const int kRuleControls[] = { IDC_REMOVE, IDC_IGNORE, IDC_NOPIN, IDC_NOROLL, IDC_POSLABEL, IDC_RIGHT, IDC_LEFT,
                                      IDC_OFFLABEL, IDC_OFFSET, IDC_OFFSPIN, IDC_OFFLABEL2, IDC_RHLABEL, IDC_ROLLHEIGHT,
-                                     IDC_RHLABEL2 };
+                                     IDC_RHLABEL2, IDC_DOWNLABEL, IDC_DOWN, IDC_DOWNSPIN, IDC_DOWNLABEL2,
+                                     IDC_APPSIZELABEL, IDC_APPSIZE, IDC_APPSIZELABEL2 };
+
+// Hot key control <-> our Hotkey (the control cannot take the Win key).
+static Hotkey GetKey(HWND d, int id)
+{
+    WORD v = LOWORD(SendDlgItemMessageW(d, id, HKM_GETHOTKEY, 0, 0));
+    Hotkey hk;
+    hk.vk = LOBYTE(v);
+    BYTE m = HIBYTE(v);
+    if (m & HOTKEYF_CONTROL) hk.mod |= MOD_CONTROL;
+    if (m & HOTKEYF_ALT) hk.mod |= MOD_ALT;
+    if (m & HOTKEYF_SHIFT) hk.mod |= MOD_SHIFT;
+    if (!hk.vk || !hk.mod) hk = Hotkey();
+    return hk;
+}
+static void SetKey(HWND d, int id, const Hotkey& hk)
+{
+    BYTE m = 0;
+    if (hk.mod & MOD_CONTROL) m |= HOTKEYF_CONTROL;
+    if (hk.mod & MOD_ALT) m |= HOTKEYF_ALT;
+    if (hk.mod & MOD_SHIFT) m |= HOTKEYF_SHIFT;
+    // a plain key or Shift+key would steal ordinary typing: force Ctrl+Alt
+    SendDlgItemMessageW(d, id, HKM_SETRULES, HKCOMB_NONE | HKCOMB_S, MAKELPARAM(HOTKEYF_CONTROL | HOTKEYF_ALT, 0));
+    SendDlgItemMessageW(d, id, HKM_SETHOTKEY, MAKEWORD(hk.vk, m), 0);
+}
 
 static bool Checked(HWND d, int id) { return IsDlgButtonChecked(d, id) == BST_CHECKED; }
 static void Check(HWND d, int id, bool on) { CheckDlgButton(d, id, on ? BST_CHECKED : BST_UNCHECKED); }
@@ -44,6 +69,8 @@ static void LoadRule(HWND d)
     CheckRadioButton(d, IDC_RIGHT, IDC_LEFT, r->left ? IDC_LEFT : IDC_RIGHT);
     SetDlgItemInt(d, IDC_OFFSET, (UINT)r->offset, TRUE);
     SetDlgItemInt(d, IDC_ROLLHEIGHT, (UINT)r->rollHeight, FALSE);
+    SetDlgItemInt(d, IDC_DOWN, (UINT)r->down, TRUE);
+    SetDlgItemInt(d, IDC_APPSIZE, (UINT)r->size, FALSE);
     g_loading = false;
 }
 
@@ -66,6 +93,16 @@ static void Apply(HWND d)
     g_cfg.rolledTopmost = Checked(d, IDC_ROLLTOP);
     g_cfg.moveLeft = (int)GetDlgItemInt(d, IDC_MOVELEFT, nullptr, TRUE);
     g_cfg.moveLeftMaximized = (int)GetDlgItemInt(d, IDC_MOVELEFTMAX, nullptr, TRUE);
+    int size = (int)GetDlgItemInt(d, IDC_BTNSIZE, nullptr, FALSE);
+    if (size >= 40 && size <= 300) g_cfg.size = size; // ignore half-typed values
+    g_cfg.runAsAdmin = Checked(d, IDC_ADMIN);
+    Hotkey pk = GetKey(d, IDC_PINKEY), rk = GetKey(d, IDC_ROLLKEY);
+    if (pk.vk != g_cfg.pinKey.vk || pk.mod != g_cfg.pinKey.mod || rk.vk != g_cfg.rollKey.vk ||
+        rk.mod != g_cfg.rollKey.mod) {
+        g_cfg.pinKey = pk;
+        g_cfg.rollKey = rk;
+        AppRegisterHotkeys();
+    }
     EnableWindow(GetDlgItem(d, IDC_ROLLTOP), g_cfg.roll);
     if (ExceptionRule* r = SelectedRule(d)) {
         r->ignore = Checked(d, IDC_IGNORE);
@@ -74,6 +111,9 @@ static void Apply(HWND d)
         r->left = Checked(d, IDC_LEFT);
         r->offset = (int)GetDlgItemInt(d, IDC_OFFSET, nullptr, TRUE);
         r->rollHeight = (int)GetDlgItemInt(d, IDC_ROLLHEIGHT, nullptr, FALSE);
+        r->down = (int)GetDlgItemInt(d, IDC_DOWN, nullptr, TRUE);
+        int rs = (int)GetDlgItemInt(d, IDC_APPSIZE, nullptr, FALSE);
+        r->size = (rs >= 40 && rs <= 300) ? rs : 0;
     }
     if (hadRoll && !g_cfg.roll) TrackerUnrollAll(); // as FbX did
     TrackerRefreshAll();
@@ -120,6 +160,11 @@ static INT_PTR CALLBACK SettingsProc(HWND d, UINT msg, WPARAM wp, LPARAM)
         SetDlgItemInt(d, IDC_MOVELEFTMAX, (UINT)g_cfg.moveLeftMaximized, TRUE);
         Check(d, IDC_AUTOSTART, IsAutoStart());
         SendDlgItemMessageW(d, IDC_OFFSPIN, UDM_SETRANGE32, (WPARAM)-3000, 3000);
+        SendDlgItemMessageW(d, IDC_DOWNSPIN, UDM_SETRANGE32, (WPARAM)-200, 200);
+        SetDlgItemInt(d, IDC_BTNSIZE, (UINT)g_cfg.size, FALSE);
+        Check(d, IDC_ADMIN, g_cfg.runAsAdmin);
+        SetKey(d, IDC_PINKEY, g_cfg.pinKey);
+        SetKey(d, IDC_ROLLKEY, g_cfg.rollKey);
         HWND lb = GetDlgItem(d, IDC_APPS);
         for (const auto& r : g_cfg.exceptions) SendMessageW(lb, LB_ADDSTRING, 0, (LPARAM)r.exe.c_str());
         if (!g_cfg.exceptions.empty()) SendMessageW(lb, LB_SETCURSEL, 0, 0);
@@ -131,15 +176,30 @@ static INT_PTR CALLBACK SettingsProc(HWND d, UINT msg, WPARAM wp, LPARAM)
     case WM_COMMAND: {
         int id = LOWORD(wp), code = HIWORD(wp);
         switch (id) {
-        case IDOK:
+        case IDOK: {
             Apply(d);
             SaveConfig(g_cfg);
-            if (Checked(d, IDC_AUTOSTART) != IsAutoStart()) SetAutoStart(Checked(d, IDC_AUTOSTART));
+            bool autoStart = Checked(d, IDC_AUTOSTART);
+            bool adminChanged = g_cfg.runAsAdmin != g_backup.runAsAdmin;
+            if (autoStart != IsAutoStart() || adminChanged) SetAutoStart(autoStart, g_cfg.runAsAdmin);
             EndDialog(d, IDOK);
+            if (g_cfg.runAsAdmin && !IsElevated()) {
+                // Windows asks for permission once; a new elevated copy takes over.
+                if (!AppRestartElevated())
+                    MessageBoxW(nullptr,
+                                L"FBX is still running without administrator rights.\n"
+                                L"It will ask again the next time it starts.",
+                                L"FBX Pin & Roll-up", MB_OK | MB_ICONINFORMATION);
+            } else if (adminChanged && !g_cfg.runAsAdmin && IsElevated()) {
+                MessageBoxW(nullptr, L"FBX will run without administrator rights the next time it starts.",
+                            L"FBX Pin & Roll-up", MB_OK | MB_ICONINFORMATION);
+            }
             return TRUE;
+        }
         case IDCANCEL: {
             bool hadRoll = g_cfg.roll;
             g_cfg = g_backup;
+            AppRegisterHotkeys();
             if (hadRoll && !g_cfg.roll) TrackerUnrollAll();
             TrackerRefreshAll();
             EndDialog(d, IDCANCEL);
@@ -175,6 +235,7 @@ static INT_PTR CALLBACK SettingsProc(HWND d, UINT msg, WPARAM wp, LPARAM)
                 Apply(d);
             }
             return TRUE;
+        case IDC_ADMIN:
         case IDC_PINBTN:
         case IDC_ROLLBTN:
         case IDC_ROLLTOP:
@@ -183,6 +244,11 @@ static INT_PTR CALLBACK SettingsProc(HWND d, UINT msg, WPARAM wp, LPARAM)
         case IDC_NOROLL:
             if (code == BN_CLICKED) Apply(d);
             return TRUE;
+        case IDC_PINKEY:
+        case IDC_ROLLKEY:
+        case IDC_BTNSIZE:
+        case IDC_DOWN:
+        case IDC_APPSIZE:
         case IDC_MOVELEFT:
         case IDC_MOVELEFTMAX:
         case IDC_OFFSET:
@@ -205,7 +271,7 @@ void ShowSettings(HINSTANCE inst)
         SetForegroundWindow(g_dlg);
         return;
     }
-    INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_UPDOWN_CLASS | ICC_STANDARD_CLASSES };
+    INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_UPDOWN_CLASS | ICC_STANDARD_CLASSES | ICC_HOTKEY_CLASS };
     InitCommonControlsEx(&icc);
     g_loading = true;
     DialogBoxParamW(inst, MAKEINTRESOURCEW(IDD_SETTINGS), nullptr, SettingsProc, 0);

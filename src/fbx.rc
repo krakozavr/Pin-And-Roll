@@ -27,12 +27,12 @@ BEGIN
   END
 END
 
-IDD_SETTINGS DIALOGEX 0, 0, 334, 266
+IDD_SETTINGS DIALOGEX 0, 0, 340, 330
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "FBX Pin & Roll-up - Settings"
 FONT 9, "Segoe UI"
 BEGIN
-  GROUPBOX "All programs", -1, 7, 4, 320, 90
+  GROUPBOX "All programs", -1, 7, 4, 326, 136
   AUTOCHECKBOX "&Push-pin button to keep windows on top", IDC_PINBTN, 15, 16, 300, 10
   AUTOCHECKBOX "&Roll-up button to display only the title bar of a window", IDC_ROLLBTN, 15, 28, 300, 10
   AUTOCHECKBOX "When rolled up, &keep the window bar on top", IDC_ROLLTOP, 27, 40, 288, 10
@@ -40,27 +40,41 @@ BEGIN
   EDITTEXT IDC_MOVELEFT, 99, 55, 28, 12, ES_AUTOHSCROLL
   LTEXT "pixels, and by", -1, 131, 57, 46, 8
   EDITTEXT IDC_MOVELEFTMAX, 179, 55, 28, 12, ES_AUTOHSCROLL
-  LTEXT "more if a window is maximized", -1, 211, 57, 110, 8
-  AUTOCHECKBOX "&Start with Windows", IDC_AUTOSTART, 15, 76, 300, 10
-  GROUPBOX "Individual programs", -1, 7, 98, 320, 142
-  LISTBOX IDC_APPS, 15, 110, 104, 104, LBS_NOTIFY | LBS_SORT | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_BORDER | WS_TABSTOP
-  PUSHBUTTON "Pick an &app...", IDC_PICK, 15, 219, 58, 14
-  PUSHBUTTON "Re&move", IDC_REMOVE, 77, 219, 42, 14
-  AUTOCHECKBOX "&Do not handle this program at all", IDC_IGNORE, 127, 110, 192, 10
-  AUTOCHECKBOX "No push-pi&n button", IDC_NOPIN, 127, 122, 192, 10
-  AUTOCHECKBOX "No roll-&up button", IDC_NOROLL, 127, 134, 192, 10
-  LTEXT "Button position:", IDC_POSLABEL, 127, 150, 192, 8
-  AUTORADIOBUTTON "Right, next to the window's own buttons", IDC_RIGHT, 135, 161, 184, 10, WS_GROUP | WS_TABSTOP
-  AUTORADIOBUTTON "Left end of the title bar", IDC_LEFT, 135, 173, 184, 10
-  LTEXT "Shift left by", IDC_OFFLABEL, 127, 191, 42, 8, WS_GROUP
-  EDITTEXT IDC_OFFSET, 171, 189, 40, 12, ES_AUTOHSCROLL
+  LTEXT "more if a window is maximized", -1, 211, 57, 116, 8
+  LTEXT "Button size", -1, 15, 73, 40, 8
+  EDITTEXT IDC_BTNSIZE, 57, 71, 28, 12, ES_AUTOHSCROLL | ES_NUMBER
+  LTEXT "% of normal", -1, 89, 73, 60, 8
+  LTEXT "Hot keys for the active window:   pin", -1, 15, 90, 120, 8
+  CONTROL "", IDC_PINKEY, HOTKEY_CLASS, WS_BORDER | WS_TABSTOP, 137, 88, 70, 12
+  LTEXT "roll-up", -1, 215, 90, 26, 8
+  CONTROL "", IDC_ROLLKEY, HOTKEY_CLASS, WS_BORDER | WS_TABSTOP, 243, 88, 70, 12
+  AUTOCHECKBOX "&Start with Windows", IDC_AUTOSTART, 15, 108, 300, 10
+  AUTOCHECKBOX "Run as administrator (buttons also on &Task Manager and other elevated programs)", IDC_ADMIN, 15, 122, 312, 10
+  GROUPBOX "Individual programs", -1, 7, 144, 326, 158
+  LISTBOX IDC_APPS, 15, 156, 104, 120, LBS_NOTIFY | LBS_SORT | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_BORDER | WS_TABSTOP
+  PUSHBUTTON "Pick an &app...", IDC_PICK, 15, 281, 58, 14
+  PUSHBUTTON "Re&move", IDC_REMOVE, 77, 281, 42, 14
+  AUTOCHECKBOX "&Do not handle this program at all", IDC_IGNORE, 127, 156, 198, 10
+  AUTOCHECKBOX "No push-pi&n button", IDC_NOPIN, 127, 168, 198, 10
+  AUTOCHECKBOX "No roll-&up button", IDC_NOROLL, 127, 180, 198, 10
+  LTEXT "Button position:", IDC_POSLABEL, 127, 195, 198, 8
+  AUTORADIOBUTTON "Right, next to the window's own buttons", IDC_RIGHT, 135, 206, 190, 10, WS_GROUP | WS_TABSTOP
+  AUTORADIOBUTTON "Left end of the title bar", IDC_LEFT, 135, 218, 190, 10
+  LTEXT "Shift left by", IDC_OFFLABEL, 127, 235, 44, 8, WS_GROUP
+  EDITTEXT IDC_OFFSET, 173, 233, 40, 12, ES_AUTOHSCROLL
   CONTROL "", IDC_OFFSPIN, UPDOWN_CLASS, UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS, 0, 0, 10, 12
-  LTEXT "pixels (negative = right)", IDC_OFFLABEL2, 215, 191, 108, 8
-  LTEXT "Rolled-up height", IDC_RHLABEL, 127, 208, 56, 8
-  EDITTEXT IDC_ROLLHEIGHT, 185, 206, 28, 12, ES_AUTOHSCROLL | ES_NUMBER
-  LTEXT "pixels (0 = automatic)", IDC_RHLABEL2, 217, 208, 104, 8
-  LTEXT "Pick a program to give it its own settings.", IDC_HINT, 127, 223, 194, 8
-  LTEXT "Changes show immediately. Cancel undoes them.", -1, 9, 250, 200, 8
-  DEFPUSHBUTTON "OK", IDOK, 219, 246, 50, 14
-  PUSHBUTTON "Cancel", IDCANCEL, 277, 246, 50, 14
+  LTEXT "pixels (negative = right)", IDC_OFFLABEL2, 217, 235, 110, 8
+  LTEXT "Shift down by", IDC_DOWNLABEL, 127, 251, 44, 8
+  EDITTEXT IDC_DOWN, 173, 249, 40, 12, ES_AUTOHSCROLL
+  CONTROL "", IDC_DOWNSPIN, UPDOWN_CLASS, UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS, 0, 0, 10, 12
+  LTEXT "pixels (negative = up)", IDC_DOWNLABEL2, 217, 251, 110, 8
+  LTEXT "Button size", IDC_APPSIZELABEL, 127, 267, 44, 8
+  EDITTEXT IDC_APPSIZE, 173, 265, 28, 12, ES_AUTOHSCROLL | ES_NUMBER
+  LTEXT "% (0 = as set above)", IDC_APPSIZELABEL2, 205, 267, 122, 8
+  LTEXT "Rolled-up height", IDC_RHLABEL, 127, 283, 56, 8
+  EDITTEXT IDC_ROLLHEIGHT, 185, 281, 28, 12, ES_AUTOHSCROLL | ES_NUMBER
+  LTEXT "pixels (0 = automatic)", IDC_RHLABEL2, 217, 283, 110, 8
+  LTEXT "Changes show immediately. Cancel undoes them.", -1, 9, 314, 200, 8
+  DEFPUSHBUTTON "OK", IDOK, 225, 310, 50, 14
+  PUSHBUTTON "Cancel", IDCANCEL, 283, 310, 50, 14
 END

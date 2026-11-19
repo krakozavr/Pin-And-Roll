@@ -27,6 +27,16 @@ jobs:
           New-Item -ItemType Directory -Force shots | Out-Null
           cmd /c ver
           build\Release\fbxtest.exe build\Release\fbx.exe --shot shots\${{ matrix.os }}
+      - name: Start-up entry (scheduled task when "run as administrator" is set)
+        run: |
+          Set-Content -Path at.ini -Value "[Settings]`r`nRunAsAdmin=1"
+          Start-Process -Wait build\Release\fbx.exe -ArgumentList '--config', "$PWD\at.ini", '--autostart', 'on'
+          schtasks /query /tn "FBX Pin and Roll-up" /xml
+          if ($LASTEXITCODE -ne 0) { Write-Error "task was not created"; exit 1 }
+          Start-Process -Wait build\Release\fbx.exe -ArgumentList '--config', "$PWD\at.ini", '--autostart', 'off'
+          schtasks /query /tn "FBX Pin and Roll-up" 2>$null
+          if ($LASTEXITCODE -eq 0) { Write-Error "task was not removed"; exit 1 }
+          exit 0
       - name: Upload program
         if: always()
         uses: actions/upload-artifact@v4

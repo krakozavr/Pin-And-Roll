@@ -68,7 +68,7 @@ static void DrawRoll(Graphics& g, float ox, float oy, float s, Color fg, bool ro
     g.Restore(st);
 }
 
-void RenderBar(HWND bar, const RECT& rc, const ButtonDraw* btns, int count, UINT dpi, bool dark)
+void RenderBar(HWND bar, const RECT& rc, const ButtonDraw* btns, int count, UINT dpi, bool dark, float scale)
 {
     int w = rc.right - rc.left, h = rc.bottom - rc.top;
     if (w <= 0 || h <= 0 || count <= 0) return;
@@ -103,7 +103,7 @@ void RenderBar(HWND bar, const RECT& rc, const ButtonDraw* btns, int count, UINT
 
         BYTE c = dark ? 255 : 0;
         Color fg(255, c, c, c); // white on a dark title bar, black on a light one
-        float s = dpi / 96.0f;
+        float s = dpi / 96.0f * scale;
         float bw = (float)w / count;
         for (int i = 0; i < count; i++) {
             float x = bw * i;

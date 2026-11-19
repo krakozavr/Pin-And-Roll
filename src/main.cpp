@@ -12,6 +12,8 @@ static HINSTANCE g_hinst;
 static NOTIFYICONDATAW g_nid;
 static bool g_tray = true;
 static UINT g_taskbarCreated;
+static HWND g_mainWnd;
+static std::wstring g_args; // our own command line switches, for restarting
 
 static void AddTray(HWND wnd)
 {
@@ -25,6 +27,34 @@ static void AddTray(HWND wnd)
     g_nid.hIcon = CreateAppIcon(GetSystemMetrics(SM_CXSMICON));
     lstrcpynW(g_nid.szTip, L"FBX Pin & Roll-up", 64);
     Shell_NotifyIconW(NIM_ADD, &g_nid);
+}
+
+static void RegisterHotkeys(HWND wnd);
+void AppRegisterHotkeys()
+{
+    if (g_mainWnd) RegisterHotkeys(g_mainWnd);
+}
+
+// Starts an elevated copy of FBX (Windows shows its permission prompt).
+static bool LaunchElevated()
+{
+    wchar_t exe[MAX_PATH];
+    GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    std::wstring args = g_args + L" --wait";
+    SHELLEXECUTEINFOW sei = {};
+    sei.cbSize = sizeof(sei);
+    sei.lpVerb = L"runas";
+    sei.lpFile = exe;
+    sei.lpParameters = args.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    return ShellExecuteExW(&sei) != 0;
+}
+
+bool AppRestartElevated()
+{
+    if (!LaunchElevated()) return false;
+    if (g_mainWnd) PostMessageW(g_mainWnd, WM_CLOSE, 0, 0); // the new copy waits for us to finish
+    return true;
 }
 
 static void RegisterHotkeys(HWND wnd)
@@ -142,13 +172,21 @@ static LRESULT CALLBACK MainProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
 {
     g_hinst = inst;
-    bool wantExit = false;
+    bool wantExit = false, wait = false;
+    int autoStartCmd = -1;
     int argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     for (int i = 1; argv && i < argc; i++) {
         if (!lstrcmpiW(argv[i], L"--exit")) wantExit = true;
-        else if (!lstrcmpiW(argv[i], L"--no-tray")) g_tray = false;
-        else if (!lstrcmpiW(argv[i], L"--config") && i + 1 < argc) g_cfg.path = argv[++i];
+        else if (!lstrcmpiW(argv[i], L"--wait")) wait = true;
+        else if (!lstrcmpiW(argv[i], L"--autostart") && i + 1 < argc) autoStartCmd = !lstrcmpiW(argv[++i], L"on");
+        else if (!lstrcmpiW(argv[i], L"--no-tray")) {
+            g_tray = false;
+            g_args += L" --no-tray";
+        } else if (!lstrcmpiW(argv[i], L"--config") && i + 1 < argc) {
+            g_cfg.path = argv[++i];
+            g_args += L" --config \"" + g_cfg.path + L"\"";
+        }
     }
     if (argv) LocalFree(argv);
 
@@ -162,10 +200,26 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         return 0;
     }
 
-    HANDLE mutex = CreateMutexW(nullptr, TRUE, L"Local\\FbxPinRollSingleInstance");
-    if (GetLastError() == ERROR_ALREADY_EXISTS) return 0;
-
     LoadConfig(g_cfg);
+
+    if (autoStartCmd >= 0) { // fbx.exe --autostart on|off
+        SetAutoStart(autoStartCmd == 1, g_cfg.runAsAdmin);
+        return 0;
+    }
+
+    // "Run as administrator" is set and we are not elevated: hand over to
+    // an elevated copy. If the prompt is declined we carry on as we are.
+    if (g_cfg.runAsAdmin && !IsElevated() && !FindWindowW(FBX_MAIN_CLASS, nullptr) && LaunchElevated()) return 0;
+
+    // One instance only. A copy started to replace us (--wait) is patient.
+    HANDLE mutex = CreateMutexW(nullptr, FALSE, L"Local\\FbxPinRollSingleInstance");
+    DWORD got = mutex ? WaitForSingleObject(mutex, wait ? 10000 : 0) : WAIT_FAILED;
+    if (got != WAIT_OBJECT_0 && got != WAIT_ABANDONED) return 0;
+
+    // Elevated now, and start-up is still the plain kind: convert it so that
+    // logging on does not bring up the permission prompt.
+    if (g_cfg.runAsAdmin && IsElevated() && IsAutoStart()) SetAutoStart(true, true);
+
     RenderInit();
 
     WNDCLASSW wc = {};
@@ -178,6 +232,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
                                nullptr, inst, nullptr);
     if (!wnd) return 1;
 
+    g_mainWnd = wnd;
     AddTray(wnd);
     RegisterHotkeys(wnd);
     if (!TrackerInit(inst, wnd)) return 1;
@@ -188,6 +243,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         DispatchMessageW(&msg);
     }
     RenderShutdown();
-    if (mutex) CloseHandle(mutex);
+    ReleaseMutex(mutex);
+    CloseHandle(mutex);
     return 0;
 }

@@ -45,6 +45,11 @@ static bool WaitFor(const std::function<bool()>& f, int ms = 5000)
 static LRESULT CALLBACK TargetProc(HWND w, UINT m, WPARAM wp, LPARAM lp)
 {
     if (m == WM_DESTROY && w == g_target) PostQuitMessage(0);
+    if (m == WM_GETMINMAXINFO && w == g_second && g_second) {
+        // like many real programs: refuses to be shorter than 200 px
+        ((MINMAXINFO*)lp)->ptMinTrackSize.y = MulDiv(200, (int)GetDpiForWindow(w), 96);
+        return 0;
+    }
     return DefWindowProcW(w, m, wp, lp);
 }
 
@@ -410,6 +415,48 @@ int wmain(int argc, wchar_t** argv)
     Check(WaitFor([&] { return FindBar(g_second) != nullptr; }), "a newly shown window gets buttons");
     ShowWindow(g_second, SW_HIDE);
     Check(WaitFor([&] { return FindBar(g_second) == nullptr; }), "buttons hide with their window");
+
+    // --- dragging a rolled-up window whose program enforces a minimum height
+    ShowWindow(g_second, SW_SHOW);
+    SetForegroundWindow(g_second);
+    WaitFor([&] { return FindBar(g_second) != nullptr; });
+    Sleep(400);
+    {
+        int sh0 = Height(g_second);
+        ClickRoll(g_second);
+        Check(WaitFor([&] { return Height(g_second) < D(70); }), "minimum-height window rolls up below its minimum");
+        RECT s0 = Rect(g_second);
+        SetCursorPos(s0.left + D(120), s0.top + D(15));
+        Sleep(150);
+        INPUT in = {};
+        in.type = INPUT_MOUSE;
+        in.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+        SendInput(1, &in, sizeof(in));
+        Sleep(150);
+        int during = 0;
+        for (int i = 0; i < 12; i++) {
+            in.mi.dwFlags = MOUSEEVENTF_MOVE;
+            in.mi.dx = 6;
+            in.mi.dy = 4;
+            SendInput(1, &in, sizeof(in));
+            Sleep(40);
+            if (Height(g_second) > during) during = Height(g_second);
+        }
+        Sleep(200);
+        in.mi.dx = in.mi.dy = 0;
+        in.mi.dwFlags = MOUSEEVENTF_LEFTUP;
+        SendInput(1, &in, sizeof(in));
+        RECT s1 = Rect(g_second);
+        printf("drag: moved by %ld,%ld; tallest during drag %d px; rolled height %d\n", s1.left - s0.left,
+               s1.top - s0.top, during, s0.bottom - s0.top);
+        Check(s1.left - s0.left > D(15), "rolled window was dragged with the mouse");
+        Check(WaitFor([&] { return Height(g_second) < D(70); }, 4000), "after the drag it is a rolled-up strip again");
+        Sleep(600);
+        ClickRoll(g_second);
+        Check(WaitFor([&] { return Height(g_second) == sh0; }), "...and still unrolls to its original height");
+        SetCursorPos(5, 400);
+    }
+    ShowWindow(g_second, SW_HIDE);
 
     // --- a program that draws its own (taller, wider) title bar
     ShowWindow(g_custom, SW_SHOWNOACTIVATE);

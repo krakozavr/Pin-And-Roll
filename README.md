@@ -76,9 +76,22 @@ This version injects nothing. One small program:
 
 ## Use
 
-Run `fbx.exe`. It lives in the notification area; the menu there has the three
-FbX options, *Start with Windows*, and opens the settings file
-(`%APPDATA%\FBX\fbx.ini`), which documents hot keys and exceptions.
+Run `fbx.exe`. It lives in the notification area. Double-click the icon (or
+choose *Settings...* in its menu) for the settings window:
+
+- the three FbX options, global shift and button size, hot keys, *Start with
+  Windows* and *Run as administrator*;
+- per-program settings: *Pick an app...* lists the running programs; each can
+  be ignored, lose one of the buttons, have the buttons on the right or at the
+  left end of the title bar, shifted sideways and vertically, resized, and
+  given its own rolled-up height.
+
+Changes apply while you make them. Everything is stored in
+`%APPDATA%\FBX\fbx.ini`.
+
+*Run as administrator* restarts FBX elevated (Windows asks once) so that
+elevated programs such as Task Manager get buttons too. Together with *Start
+with Windows* it uses a scheduled task, so logging on does not prompt.
 
 `fbx.exe --exit` stops a running copy.
 

@@ -24,6 +24,10 @@ struct Tracked {
     bool noPin = false, noRoll = false;
     bool left = false, manual = false; // manual: position set by the user, no automatic search
     int offset = 0, rollHeight = 0;
+    int size = 0, down = 0;
+
+    // The user is dragging the window (system move/size loop).
+    bool inMoveSize = false, moveIsResize = false;
 
     // Roll-up state. "suspended": rolled while not maximized, currently
     // maximized (Windows will bring the strip back on restore).
@@ -53,6 +57,7 @@ struct Tracked {
     int shownCount = 0;
     bool shownDark = false;
     UINT shownDpi = 0;
+    float shownScale = 0;
     bool dead = false;
 };
 
@@ -60,6 +65,7 @@ struct Geometry {
     RECT bar;
     int rolledHeight;
     UINT dpi;
+    float scale; // button size factor chosen in the settings
 };
 
 HINSTANCE g_inst;
@@ -160,6 +166,8 @@ void ApplyException(Tracked& t)
     t.manual = r && (r->left || r->offset != 0);
     t.offset = r ? r->offset : 0;
     t.rollHeight = r ? r->rollHeight : 0;
+    t.size = r ? r->size : 0;
+    t.down = r ? r->down : 0;
 }
 
 struct Frame {
@@ -375,16 +383,18 @@ void ComputeGeometry(const Tracked& t, LONG style, LONG ex, const Frame& f, int 
     }
 
     int capH = capB - capT;
-    int bh = Clamp(capH, D(20), D(32));
-    int bw = D(32);
+    int pct = Clamp(t.size > 0 ? t.size : g_cfg.size, 40, 300);
+    g.scale = pct / 100.0f;
+    int bh = Clamp(capH, D(20), D(32)) * pct / 100;
+    int bw = D(32) * pct / 100;
     if (f.custom && t.probeValid && !t.manual && extraShift == 0 && t.probeFreeAdjacent > 0 &&
         t.probeFreeAdjacent < count * bw + D(2)) {
         // Not enough free room for full-size buttons: make them narrower
         // rather than cover the program's own controls (e.g. a "new tab" +).
         int w = (t.probeFreeAdjacent - D(2)) / count;
-        if (w >= D(20)) bw = w;
+        if (w >= D(20) * pct / 100) bw = w;
     }
-    int top = capT + (capH - bh) / 2;
+    int top = capT + (capH - bh) / 2 + D(t.down);
     int shift = D(2) + extraShift + D(g_cfg.moveLeft) + (f.zoomed ? D(g_cfg.moveLeftMaximized) : 0) + D(t.offset);
     bool mirrored = (capL + capR) / 2 < (wr.left + wr.right) / 2; // right-to-left windows
     if (t.left) {
@@ -529,7 +539,32 @@ void UpdateBar(Tracked& t)
     if (!GetWindowRect(h, &wr)) return;
     bool iconic = IsIconic(h) != 0;
 
-    if (t.rolled && !iconic) {
+    // While the user drags a rolled-up window many programs enforce their
+    // minimum height, which puffs the strip up. That is not a resize: keep
+    // the rolled state and put the strip back when the drag ends.
+    {
+        GUITHREADINFO gi = {};
+        gi.cbSize = sizeof(gi);
+        bool moving = GetGUIThreadInfo(GetWindowThreadProcessId(h, nullptr), &gi) &&
+                      (gi.flags & GUI_INMOVESIZE) && gi.hwndMoveSize == h;
+        if (moving && !t.inMoveSize) {
+            POINT p;
+            GetCursorPos(&p);
+            int edge = MulDiv(5, (int)GetDpiForWindow(h), 96);
+            // grabbed by the top or bottom edge: a real vertical resize
+            t.moveIsResize = p.y >= wr.bottom - 2 * edge || p.y <= wr.top + edge;
+        } else if (!moving && t.inMoveSize && !t.moveIsResize && t.rolled && !t.suspended && !t.rollPending &&
+                   !iconic && Abs((wr.bottom - wr.top) - t.rolledHeight) > 2) {
+            SetWindowPos(h, nullptr, 0, 0, wr.right - wr.left, t.rolledHeight,
+                         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING | SWP_ASYNCWINDOWPOS);
+            t.rollPending = true;
+            t.rollTick = GetTickCount();
+            Burst();
+        }
+        t.inMoveSize = moving;
+    }
+
+    if (t.rolled && !iconic && !(t.inMoveSize && !t.moveIsResize)) {
         bool strip = Abs((wr.bottom - wr.top) - t.rolledHeight) <= 2;
         bool zoomed = IsZoomed(h) != 0;
         if (t.rollPending) {
@@ -597,9 +632,11 @@ void UpdateBar(Tracked& t)
                     (g.bar.bottom - g.bar.top) == (t.shownRect.bottom - t.shownRect.top);
     bool samePos = g.bar.left == t.shownRect.left && g.bar.top == t.shownRect.top;
     bool sameLook = sameSize && t.shownCount == t.nBtn && t.shownDark == t.dark && t.shownDpi == g.dpi &&
+                    t.shownScale == g.scale &&
                     !memcmp(bd, t.shownBtn, sizeof(bd));
     if (!sameLook) {
-        RenderBar(t.bar, g.bar, bd, t.nBtn, g.dpi, t.dark);
+        RenderBar(t.bar, g.bar, bd, t.nBtn, g.dpi, t.dark, g.scale);
+        t.shownScale = g.scale;
         memcpy(t.shownBtn, bd, sizeof(bd));
         t.shownCount = t.nBtn;
         t.shownDark = t.dark;

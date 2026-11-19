@@ -39,6 +39,8 @@ struct ExceptionRule {
     bool left = false;  // put the buttons at the left end of the title bar
     int offset = 0;     // move buttons left by N pixels (at 100% scale); negative = right
     int rollHeight = 0; // rolled-up height override (at 100% scale), 0 = auto
+    int size = 0;       // button size in percent, 0 = use the global size
+    int down = 0;       // move buttons down by N pixels (at 100% scale); negative = up
 };
 
 struct Hotkey {
@@ -53,6 +55,8 @@ struct Config {
     bool rolledTopmost = false;
     int moveLeft = 0;
     int moveLeftMaximized = 0;
+    int size = 100;          // button size in percent
+    bool runAsAdmin = false; // restart elevated so that elevated programs get buttons too
     Hotkey pinKey, rollKey;
     std::vector<ExceptionRule> exceptions;
 
@@ -65,7 +69,10 @@ void LoadConfig(Config& cfg);
 void SaveToggles(const Config& cfg);
 void SaveConfig(const Config& cfg); // everything the settings window edits
 bool IsAutoStart();
-void SetAutoStart(bool on);
+// asAdmin: start elevated at logon without a prompt (uses a scheduled task).
+void SetAutoStart(bool on, bool asAdmin);
+bool IsElevated();
+std::wstring HotkeyText(const Hotkey& hk);
 bool SystemAppsDark();
 
 // render.cpp
@@ -77,7 +84,8 @@ struct ButtonDraw {
 };
 void RenderInit();
 void RenderShutdown();
-void RenderBar(HWND bar, const RECT& rc, const ButtonDraw* btns, int count, UINT dpi, bool darkBackground);
+void RenderBar(HWND bar, const RECT& rc, const ButtonDraw* btns, int count, UINT dpi, bool darkBackground,
+               float scale);
 HICON CreateAppIcon(int size);
 
 // tracker.cpp
@@ -90,6 +98,10 @@ void TrackerUnrollAll();
 void TrackerToggleForeground(ButtonType which);
 // Programs that currently have windows with buttons: (exe name, a window title).
 void TrackerListApps(std::vector<std::pair<std::wstring, std::wstring>>& out);
+
+// main.cpp
+void AppRegisterHotkeys();
+bool AppRestartElevated(); // false if the user declined the Windows prompt
 
 // settings.cpp
 void ShowSettings(HINSTANCE inst);
