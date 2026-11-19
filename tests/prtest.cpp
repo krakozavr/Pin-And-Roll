@@ -635,7 +635,8 @@ int wmain(int argc, wchar_t** argv)
         Check(shown, "update check answers");
         if (ub) {
             wchar_t text[400] = L"";
-            GetDlgItemTextW(ub, 0xFFFF, text, 400);
+            // the window can be found a moment before its text is in place
+            WaitFor([&] { return GetDlgItemTextW(ub, 0xFFFF, text, 400) > 0; }, 3000);
             printf("update check says: %ls\n", text);
             Check(wcsstr(text, L"latest version") || wcsstr(text, L"is available"),
                   "update check reached GitHub and understood the answer");
