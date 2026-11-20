@@ -1073,7 +1073,6 @@ void PeekPoll()
 {
     POINT pt;
     if (!GetCursorPos(&pt)) return;
-    bool button = GetAsyncKeyState(VK_LBUTTON) < 0 || GetAsyncKeyState(VK_RBUTTON) < 0;
     HWND top = nullptr;
     bool haveTop = false;
     for (auto& kv : g_win) {
@@ -1093,6 +1092,9 @@ void PeekPoll()
         }
         // Opens when the mouse rests on the roll-up button; stays open only
         // while the mouse is on the title bar (the strip) or on our buttons.
+        // A button of ours is being pressed right now (known from our own
+        // window's messages; the global key state is deliberately not read).
+        bool button = t.pressed != -1;
         RECT rollBtn = {}, strip = wr;
         strip.bottom = wr.top + t.rolledHeight;
         for (int i = 0; i < t.nBtn; i++) {
